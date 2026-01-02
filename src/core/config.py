@@ -143,8 +143,8 @@ class Settings(BaseSettings):
     # Knowledge Base
     # ═══════════════════════════════════════════════════════════
     knowledge_data_path: str = Field(
-        default="/opt/raglox/data",
-        description="Path to knowledge base data"
+        default="data",
+        description="Path to knowledge base data (relative to webapp or absolute)"
     )
     
     # ═══════════════════════════════════════════════════════════
