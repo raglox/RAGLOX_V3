@@ -6,8 +6,6 @@
 import * as React from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import { Network } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { useEventStore } from '@/stores/eventStore'
 import type { GraphNode, GraphLink } from '@/types'
 
@@ -139,31 +137,46 @@ export function NetworkGraph() {
   }, [])
   
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Network Map</CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              {localGraphData.nodes.length} nodes
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {targetCount} targets
-            </Badge>
+    <div className="rounded-xl border-2 border-border-dark bg-bg-card-dark shadow-lg overflow-hidden">
+      {/* Card Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border-dark bg-bg-elevated-dark/30">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-royal-blue/10 border border-royal-blue/20">
+            <Network className="h-5 w-5 text-royal-blue" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-text-primary-dark">Network Map</h3>
+            <p className="text-xs text-text-muted-dark">Real-time topology visualization</p>
           </div>
         </div>
         
-        {/* Legend */}
-        <div className="flex flex-wrap gap-3 mt-2">
+        {/* Stats Badges */}
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated-dark border border-border-dark text-xs font-medium text-text-secondary-dark">
+            <span className="w-2 h-2 rounded-full bg-royal-blue"></span>
+            {localGraphData.nodes.length} nodes
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated-dark border border-border-dark text-xs font-medium text-text-secondary-dark">
+            <span className="w-2 h-2 rounded-full bg-success"></span>
+            {targetCount} targets
+          </span>
+        </div>
+      </div>
+      
+      {/* Legend Bar */}
+      <div className="flex items-center gap-4 px-5 py-3 border-b border-border-dark/50 bg-bg-dark/30">
+        <span className="text-xs font-medium text-text-muted-dark uppercase tracking-wider">Legend:</span>
+        <div className="flex flex-wrap gap-4">
           <LegendItem color={statusColors.discovered} label="Discovered" />
           <LegendItem color={statusColors.scanning} label="Scanning" />
           <LegendItem color={statusColors.scanned} label="Scanned" />
           <LegendItem color={statusColors.exploited} label="Exploited" />
           <LegendItem color={statusColors.cluster} label="Subnet" />
         </div>
-      </CardHeader>
+      </div>
       
-      <CardContent className="p-0 h-[400px]" ref={containerRef}>
+      {/* Graph Container */}
+      <div className="relative h-[380px]" ref={containerRef}>
         {localGraphData.nodes.length > 0 ? (
           <ForceGraph2D
             graphData={localGraphData}
@@ -182,26 +195,28 @@ export function NetworkGraph() {
             d3VelocityDecay={0.3}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-text-muted-dark">
-            <Network className="h-12 w-12 mb-3 opacity-50" />
-            <p className="text-sm">No targets discovered yet</p>
-            <p className="text-xs mt-1">Start a mission to see the network map</p>
+          <div className="flex flex-col items-center justify-center h-full text-text-muted-dark bg-bg-dark/50">
+            <div className="p-4 rounded-2xl bg-bg-elevated-dark/50 border border-border-dark/50 mb-4">
+              <Network className="h-12 w-12 opacity-40" />
+            </div>
+            <p className="text-sm font-medium">No targets discovered yet</p>
+            <p className="text-xs mt-1 text-text-muted-dark/70">Start a mission to see the network map</p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
 // Legend Item Component
 function LegendItem({ color, label }: { color: string; label: string }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <div
-        className="h-2.5 w-2.5 rounded-full"
+        className="h-3 w-3 rounded-full border-2 border-white/20"
         style={{ backgroundColor: color }}
       />
-      <span className="text-xs text-text-muted-dark">{label}</span>
+      <span className="text-xs font-medium text-text-secondary-dark">{label}</span>
     </div>
   )
 }

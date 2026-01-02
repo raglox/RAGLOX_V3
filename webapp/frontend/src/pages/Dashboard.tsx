@@ -28,32 +28,41 @@ export function Dashboard() {
   )
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-border-dark/30 pb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary-dark">Dashboard</h1>
-          <p className="text-text-secondary-dark">
+          <h1 className="text-2xl font-bold text-text-primary-dark tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-text-secondary-dark mt-1">
             Real-time security operations overview
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-text-muted-dark font-mono">
+            Last updated: {new Date().toLocaleTimeString()}
+          </span>
         </div>
       </div>
       
       {/* Stats Grid */}
-      <StatsGrid />
+      <section>
+        <StatsGrid />
+      </section>
       
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Network Graph - Takes 2 columns */}
-        <div className="lg:col-span-2">
+        <div className="xl:col-span-2">
           <NetworkGraph />
         </div>
         
         {/* Activity Feed - Takes 1 column */}
-        <div className="lg:col-span-1">
+        <div className="xl:col-span-1">
           <ActivityFeed />
         </div>
-      </div>
+      </section>
       
       {/* Target Details Drawer */}
       <TargetDetailsDrawer />
