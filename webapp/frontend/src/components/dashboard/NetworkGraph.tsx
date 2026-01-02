@@ -31,6 +31,15 @@ const priorityColors: Record<string, string> = {
   low: '#10B981',
 }
 
+// Status constants for filtering
+const STATUS = {
+  CRITICAL: 'critical',
+  EXPLOITED: 'exploited',
+  OWNED: 'owned',
+  SCANNING: 'scanning',
+  EXPLOITING: 'exploiting',
+} as const
+
 type FilterType = 'all' | 'critical' | 'exploited' | 'scanning'
 
 export function NetworkGraph() {
@@ -53,9 +62,9 @@ export function NetworkGraph() {
     
     if (filter !== 'all') {
       filteredNodes = graphData.nodes.filter(node => {
-        if (filter === 'critical') return node.priority === 'critical'
-        if (filter === 'exploited') return node.status === 'exploited' || node.status === 'owned'
-        if (filter === 'scanning') return node.status === 'scanning' || node.status === 'exploiting'
+        if (filter === 'critical') return node.priority === STATUS.CRITICAL
+        if (filter === 'exploited') return node.status === STATUS.EXPLOITED || node.status === STATUS.OWNED
+        if (filter === 'scanning') return node.status === STATUS.SCANNING || node.status === STATUS.EXPLOITING
         return true
       })
     }
