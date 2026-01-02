@@ -17,12 +17,18 @@ import {
 import type { Target, Vulnerability, Session } from '@/types'
 
 const MISSION_ID_KEY = 'raglox_current_mission_id'
-const POLL_INTERVAL = 10000 // 10 seconds
+const POLL_INTERVAL = 30000 // 30 seconds (reduced frequency)
+
+// Global state for initialization (survives HMR and StrictMode remounts)
+const globalState = {
+  initialized: false,
+  initializing: false,
+}
 
 export function useMissionData() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isLoadingRef = useRef(false)
-  const isInitializedRef = useRef(false)
+  const mountedRef = useRef(true)
   
   // Event store actions
   const {
@@ -183,37 +189,45 @@ export function useMissionData() {
   // ═══════════════════════════════════════════════════════════════
 
   const initializeMission = useCallback(async () => {
-    // Prevent double initialization in React StrictMode
-    if (isInitializedRef.current) return
-    isInitializedRef.current = true
-    
-    // Check localStorage for saved mission
-    const savedMissionId = localStorage.getItem(MISSION_ID_KEY)
-    
-    if (savedMissionId) {
-      console.log('[MissionData] Found saved mission:', savedMissionId)
-      try {
-        // Verify mission still exists
-        await fetchMission(savedMissionId)
-        await selectMission(savedMissionId)
-        return
-      } catch {
-        console.log('[MissionData] Saved mission not found, clearing')
-        localStorage.removeItem(MISSION_ID_KEY)
-      }
+    // Prevent concurrent or duplicate initialization
+    if (globalState.initialized || globalState.initializing) {
+      return
     }
+    globalState.initializing = true
     
-    // Try to find any active mission
     try {
+      // Check localStorage for saved mission
+      const savedMissionId = localStorage.getItem(MISSION_ID_KEY)
+      
+      if (savedMissionId) {
+        console.log('[MissionData] Found saved mission:', savedMissionId)
+        try {
+          // Verify mission still exists
+          await fetchMission(savedMissionId)
+          if (mountedRef.current) {
+            await selectMission(savedMissionId)
+          }
+          globalState.initialized = true
+          return
+        } catch {
+          console.log('[MissionData] Saved mission not found, clearing')
+          localStorage.removeItem(MISSION_ID_KEY)
+        }
+      }
+      
+      // Try to find any active mission
       const missions = await fetchMissions()
-      if (missions.length > 0) {
+      if (missions.length > 0 && mountedRef.current) {
         console.log('[MissionData] Auto-selecting first mission:', missions[0])
         await selectMission(missions[0])
       } else {
         console.log('[MissionData] No missions found')
       }
+      globalState.initialized = true
     } catch (error) {
       console.error('[MissionData] Failed to fetch missions:', error)
+    } finally {
+      globalState.initializing = false
     }
   }, [selectMission])
 
@@ -244,8 +258,12 @@ export function useMissionData() {
 
   // Initialize on mount
   useEffect(() => {
+    mountedRef.current = true
     initializeMission()
-    return () => stopPolling()
+    return () => {
+      mountedRef.current = false
+      stopPolling()
+    }
   }, [initializeMission, stopPolling])
 
   // Start polling when mission is selected
