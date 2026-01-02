@@ -139,3 +139,4 @@ node_modules/
 webapp/frontend/dist/
 webapp/frontend/.vite/
 *.tsbuildinfo
+data/raglox_nuclei_templates.json

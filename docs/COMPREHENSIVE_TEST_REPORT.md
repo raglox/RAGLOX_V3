@@ -10,12 +10,12 @@
 
 | Metric | Value |
 |--------|-------|
-| **Total Tests** | 662 |
-| **Passed** | ✅ 612 |
+| **Total Tests** | 707 |
+| **Passed** | ✅ 657 |
 | **Skipped** | ⏭️ 50 (ElasticSearch/External services) |
 | **Failed** | ❌ 0 |
 | **Success Rate** | **100%** |
-| **Execution Time** | ~52 seconds |
+| **Execution Time** | ~58 seconds |
 
 ---
 
@@ -117,7 +117,24 @@
 
 ---
 
-### 7. Logic & Reflexion Tests (`test_logic_trigger_chain.py`, `test_analysis_reflexion.py`)
+### 7. Nuclei Templates as Embedded Knowledge Tests (`test_nuclei_knowledge.py`)
+| Category | Tests | Status |
+|----------|-------|--------|
+| Templates Loading | 5 | ✅ |
+| Templates Query | 9 | ✅ |
+| CVE Search | 6 | ✅ |
+| Listing & Pagination | 5 | ✅ |
+| Template Quality | 4 | ✅ |
+| RX Modules Integration | 4 | ✅ |
+| Performance | 3 | ✅ |
+| Edge Cases | 6 | ✅ |
+| Behavior Comparison | 3 | ✅ |
+
+**Total**: 45 tests ✅
+
+---
+
+### 8. Logic & Reflexion Tests (`test_logic_trigger_chain.py`, `test_analysis_reflexion.py`)
 
 #### Logic Trigger Chain
 | Category | Tests | Status |
@@ -149,7 +166,7 @@
 
 ---
 
-### 8. Zombie Task Recovery Tests (`test_zombie_task_recovery.py`)
+### 9. Zombie Task Recovery Tests (`test_zombie_task_recovery.py`)
 | Category | Tests | Status |
 |----------|-------|--------|
 | Agent Crash Simulation | 3 | ✅ |
@@ -163,7 +180,7 @@
 
 ---
 
-### 9. Performance Tests (`test_performance.py`)
+### 10. Performance Tests (`test_performance.py`)
 | Category | Tests | Status |
 |----------|-------|--------|
 | Blackboard Performance | 4 | ✅ |
@@ -176,7 +193,7 @@
 
 ---
 
-### 10. Distributed Claiming Tests (`test_distributed_claiming.py`)
+### 11. Distributed Claiming Tests (`test_distributed_claiming.py`)
 | Category | Tests | Status |
 |----------|-------|--------|
 | Basic Concurrent Claiming | 2 | ✅ |
@@ -191,7 +208,7 @@
 
 ---
 
-### 11. Specialists Tests (`test_specialists.py`)
+### 12. Specialists Tests (`test_specialists.py`)
 | Category | Tests | Status |
 |----------|-------|--------|
 | Base Specialist | 4 | ✅ |
@@ -203,7 +220,7 @@
 
 ---
 
-### 12. Other Tests
+### 13. Other Tests
 
 | Test File | Tests | Status |
 |-----------|-------|--------|
@@ -216,6 +233,7 @@
 | `test_core_models.py` | 31 | ✅ |
 | `test_llm_integration.py` | 45 | ✅ |
 | `test_nuclei_integration.py` | 10 | ✅ |
+| `test_nuclei_knowledge.py` | 45 | ✅ |
 | `test_deserialization_*.py` | 4 | ✅ |
 
 ---
@@ -247,6 +265,15 @@
 - **Heartbeat monitoring**: ✅
 - **Task re-queuing**: ✅
 - **Retry limit handling**: ✅
+
+### ✅ Nuclei Templates as Embedded Knowledge
+- **Templates loaded**: 11,927 templates
+- **Severity distribution**: Critical (1,627), High (2,639), Medium (2,548), Low (413), Info (4,438)
+- **Protocol distribution**: HTTP (9,892), Code (930), File (445), TCP (276), etc.
+- **CVE search**: Working (Log4j, Spring4Shell, etc.)
+- **Tag search**: RCE, SQLi, XSS, WordPress, Apache, etc.
+- **Performance**: 100 searches < 5s, 50 listings < 3s
+- **Memory usage**: < 1MB for indices
 
 ---
 
@@ -351,6 +378,7 @@ tests/
 ├── test_logging.py                # Logging system (27 tests)
 ├── test_logic_trigger_chain.py    # Logic chains (26 tests)
 ├── test_nuclei_integration.py     # Nuclei scanner (10 tests)
+├── test_nuclei_knowledge.py       # Nuclei as embedded knowledge (45 tests)
 ├── test_performance.py            # Performance (12 tests)
 ├── test_specialists.py            # Specialists (15 tests)
 ├── test_validators.py             # Input validation (57 tests)
