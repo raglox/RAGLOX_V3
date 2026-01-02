@@ -18,7 +18,10 @@ import { useEventStore, selectConnectionStatus } from '@/stores/eventStore'
 
 export function Header() {
   const connectionStatus = useEventStore(selectConnectionStatus)
-  const { pendingApprovals, toggleAIPanel, isAIPanelOpen } = useEventStore()
+  const pendingApprovals = useEventStore((state) => state.pendingApprovals)
+  const toggleAIPanel = useEventStore((state) => state.toggleAIPanel)
+  const isAIPanelOpen = useEventStore((state) => state.isAIPanelOpen)
+  const isSidebarCollapsed = useEventStore((state) => state.isSidebarCollapsed)
   const [isStopModalOpen, setIsStopModalOpen] = React.useState(false)
   
   const handleEmergencyStop = async () => {
@@ -42,7 +45,10 @@ export function Header() {
   
   return (
     <header className="fixed top-0 right-0 left-0 z-30 h-16 border-b border-border-dark bg-bg-card-dark/95 backdrop-blur-sm">
-      <div className="flex h-full items-center justify-between px-4 ml-64">
+      <div className={cn(
+        "flex h-full items-center justify-between px-4 transition-all duration-300",
+        isSidebarCollapsed ? "ml-16" : "ml-64"
+      )}>
         {/* Left Section - Breadcrumb / Title */}
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-semibold text-text-primary-dark">

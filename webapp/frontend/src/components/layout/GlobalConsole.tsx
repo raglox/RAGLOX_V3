@@ -35,7 +35,11 @@ const logColors = {
 }
 
 export function GlobalConsole() {
-  const { isConsoleExpanded, toggleConsole, logs, clearLogs } = useEventStore()
+  const isConsoleExpanded = useEventStore((state) => state.isConsoleExpanded)
+  const toggleConsole = useEventStore((state) => state.toggleConsole)
+  const logs = useEventStore((state) => state.logs)
+  const clearLogs = useEventStore((state) => state.clearLogs)
+  const isSidebarCollapsed = useEventStore((state) => state.isSidebarCollapsed)
   const lastLog = useEventStore(selectLastLog)
   const consoleRef = React.useRef<HTMLDivElement>(null)
   
@@ -49,8 +53,9 @@ export function GlobalConsole() {
   return (
     <div
       className={cn(
-        'fixed bottom-0 left-64 right-0 z-30 border-t border-border-dark bg-bg-card-dark',
+        'fixed bottom-0 right-0 z-30 border-t border-border-dark bg-bg-card-dark',
         'transition-all duration-300 ease-in-out',
+        isSidebarCollapsed ? 'left-16' : 'left-64',
         isConsoleExpanded ? 'h-64' : 'h-10'
       )}
     >
