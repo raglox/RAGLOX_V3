@@ -1,292 +1,351 @@
-# RAGLOX v3.0 - Browser Agent Visual UI Testing Instructions
-
-## Mission Overview
-You are a visual testing agent tasked with reviewing and evaluating the RAGLOX v3.0 Security Operations Platform UI. Your goal is to ensure the interface meets **enterprise-grade SaaS standards** comparable to platforms like Datadog, Splunk, CrowdStrike, or Palo Alto Networks.
-
-## Access URLs
-| Service | URL |
-|---------|-----|
-| **Frontend** | http://172.245.232.188:3000 |
-| **Backend API** | http://172.245.232.188:8000 |
-| **API Documentation** | http://172.245.232.188:8000/docs |
-
-## Test Data Available
-- **Mission ID**: `6b14028c-7f30-4ce6-aad2-20f17eee39d0`
-- **Target IP**: 172.28.0.100 (Linux Ubuntu 22.04)
-- **Risk Score**: 85.0 (High)
-- **Open Ports**: SSH (22), HTTP (80), PostgreSQL (5432)
-- **Vulnerabilities**: 2 (SSH Weak Password - High, DB Credentials in File - Critical)
-- **Credentials**: 2 (postgres/database, admin/SSH)
-- **Active Sessions**: 1 (SSH as root)
+# RAGLOX v3.0 - توجيهات اختبار واجهة المستخدم للمظهر المؤسسي
+# Enterprise UI Visual Testing Guide for Browser Agent
 
 ---
 
-## TESTING CHECKLIST
+## 🎯 الهدف | Mission Objective
 
-### Phase 1: Overall Visual Assessment (Homepage `/`)
-
-#### 1.1 Layout & Structure
-- [ ] **Header/Navigation**: Is there a clear header with branding (RAGLOX logo)?
-- [ ] **Sidebar Navigation**: Is the sidebar visible and properly styled?
-- [ ] **Content Area**: Is the main content area properly sized and positioned?
-- [ ] **Responsive Design**: Does the layout feel balanced and professional?
-
-#### 1.2 Color Scheme & Typography
-- [ ] **Dark Theme Consistency**: Is the dark theme applied consistently across all elements?
-- [ ] **Color Hierarchy**: Are accent colors (blue, green, red, yellow) used meaningfully?
-- [ ] **Font Readability**: Are fonts legible? Is there proper contrast?
-- [ ] **Font Consistency**: Is the same font family used throughout (Inter, JetBrains Mono)?
-
-#### 1.3 Visual Polish
-- [ ] **Shadows & Depth**: Are there subtle shadows/borders creating depth?
-- [ ] **Border Radius**: Are corners consistently rounded (8px, 12px, 16px)?
-- [ ] **Spacing**: Is padding/margin consistent (8px grid system)?
-- [ ] **Icons**: Are Lucide icons properly sized and aligned?
-
-#### 1.4 Loading & Status
-- [ ] **WebSocket Indicator**: Is there a connection status indicator?
-- [ ] **Loading States**: Are there skeleton loaders or spinners?
+أنت وكيل اختبار بصري مهمتك مراجعة وتقييم واجهة منصة RAGLOX v3.0 للعمليات الأمنية. هدفك التأكد من أن الواجهة تلبي **معايير SaaS المؤسسية** المشابهة لمنصات مثل:
+- **Datadog** (Monitoring & Observability)
+- **Splunk** (Security Information & Event Management)
+- **CrowdStrike** (Endpoint Security)
+- **Palo Alto Networks** (Network Security)
 
 ---
 
-### Phase 2: Workspace A - Recon View (`/recon`)
+## 🔗 روابط الوصول | Access URLs
 
-Navigate to: **http://172.245.232.188:3000/recon**
-
-#### 2.1 Stats Bar
-- [ ] **Stats Cards**: Are there stat cards showing Targets, Open Ports, Vulns, Owned, OS Types?
-- [ ] **Numbers Visible**: Do the numbers display correctly (not 0 if data exists)?
-- [ ] **Card Styling**: Do cards have proper backgrounds, borders, and icons?
-
-#### 2.2 Toolbar
-- [ ] **Search Input**: Is there a search field with placeholder text?
-- [ ] **Group By Dropdown**: Is there a dropdown to group by OS/Priority/Status/Subnet?
-- [ ] **View Toggle**: Are there Grid/List view toggle buttons?
-- [ ] **Target Count Badge**: Does it show the correct count (e.g., "1 targets")?
-
-#### 2.3 Asset Cards (Critical Component)
-- [ ] **Card Visibility**: Is there at least one Asset Card visible for 172.28.0.100?
-- [ ] **OS Icon**: Is there a Linux icon (penguin or server icon)?
-- [ ] **IP Address**: Is "172.28.0.100" clearly displayed?
-- [ ] **Hostname**: Is "vuln-target-001" shown?
-- [ ] **Risk Score Badge**: Is "85.0" displayed with red/high-risk coloring?
-- [ ] **Port Badges**: Are ports (22, 80, 5432) shown as small badges?
-- [ ] **Status Indicator**: Is there a "scanned" or similar status badge?
-- [ ] **Priority Indicator**: Is "high" priority indicated?
-
-#### 2.4 Deep Dive Drawer
-- [ ] **Click Interaction**: Does clicking an Asset Card open a drawer/panel?
-- [ ] **Target Details**: Does the drawer show detailed target information?
-- [ ] **Port Details**: Are ports listed with their services (ssh, http, postgresql)?
-- [ ] **Close Button**: Is there a way to close the drawer?
+| الخدمة | الرابط |
+|--------|--------|
+| **واجهة المستخدم** | http://172.245.232.188:3000 |
+| **API الخلفية** | http://172.245.232.188:8000 |
+| **وثائق API** | http://172.245.232.188:8000/docs |
 
 ---
 
-### Phase 3: Workspace B - Operations View (`/operations`)
+## 📊 بيانات الاختبار المتاحة | Test Data
 
-Navigate to: **http://172.245.232.188:3000/operations**
+```yaml
+Mission:
+  ID: 6b14028c-7f30-4ce6-aad2-20f17eee39d0
+  Name: Field Acceptance Test
+  Status: running
 
-#### 3.1 Mission Timeline
-- [ ] **Timeline Visible**: Is there a mission timeline component?
-- [ ] **Phase Indicators**: Are there phase markers (Recon, Vuln Scan, Exploitation, Post-Exploitation)?
-- [ ] **Event Cards**: Are timeline events displayed as cards?
-- [ ] **Timestamps**: Do events have timestamps?
-- [ ] **Status Colors**: Are completed events green, pending yellow, failed red?
+Target:
+  IP: 172.28.0.100
+  Hostname: vuln-target-001
+  OS: Linux Ubuntu 22.04
+  Risk Score: 85.0 (High)
+  Ports:
+    - 22 (SSH)
+    - 80 (HTTP)
+    - 5432 (PostgreSQL)
 
-#### 3.2 Quick Stats
-- [ ] **Phase Display**: Is the current phase shown?
-- [ ] **Completed Count**: Number of completed events?
-- [ ] **Pending Count**: Number of pending events?
-- [ ] **Goals Progress**: Goals achieved vs total?
+Vulnerabilities:
+  - SSH Weak Password (High, CVSS 8.5) - exploit available
+  - Database Credentials in File (Critical, CVSS 9.8)
 
-#### 3.3 HITL Decision Room (if visible)
-- [ ] **Pending Approvals**: Is there a section for pending approvals?
-- [ ] **Approval Cards**: Do approval requests show action type, risk level?
-- [ ] **Approve/Reject Buttons**: Are action buttons present and styled?
-- [ ] **Risk Modal**: Does clicking an approval open a detailed risk modal?
+Credentials:
+  - postgres (database, admin, verified)
+  - admin (SSH, root, verified)
 
-#### 3.4 Status Indicators
-- [ ] **Mission Status Badge**: Is current status (running/paused/stopped) shown?
-- [ ] **System Health**: Is there a health indicator?
-
----
-
-### Phase 4: Workspace C - Loot View (`/loot`)
-
-Navigate to: **http://172.245.232.188:3000/loot**
-
-#### 4.1 Stats Summary Bar
-- [ ] **Sessions Count**: Shows "1" active session?
-- [ ] **Credentials Count**: Shows "2" credentials?
-- [ ] **Privileged Count**: Shows count of admin/root credentials?
-- [ ] **Verified Count**: Shows count of verified credentials?
-- [ ] **Artifacts Count**: Shows "0" (no artifacts yet)?
-
-#### 4.2 Tab Navigation
-- [ ] **Sessions Tab**: Is there a Sessions tab with badge?
-- [ ] **Credentials Tab**: Is there a Credentials tab with badge?
-- [ ] **Artifacts Tab**: Is there an Artifacts tab?
-- [ ] **Active Tab Styling**: Is the active tab visually distinct?
-
-#### 4.3 Sessions Tab (Session Manager)
-- [ ] **Session Table/Cards**: Are sessions displayed in a table or cards?
-- [ ] **Session Info**: Is session type (SSH), user (admin), privilege (root) shown?
-- [ ] **Status Badge**: Is "active" status shown in green?
-- [ ] **Target Reference**: Is the target (172.28.0.100) referenced?
-- [ ] **Open Terminal Button**: Is there a button to open terminal?
-- [ ] **Kill Session Button**: Is there an option to terminate session?
-
-#### 4.4 Credentials Tab (Credential Vault)
-- [ ] **Credentials Table**: Are credentials displayed in a table format?
-- [ ] **Username Column**: Are usernames (postgres, admin) visible?
-- [ ] **Password Masking**: Are passwords masked with dots (••••••)?
-- [ ] **Reveal Button**: Is there a button to reveal passwords?
-- [ ] **Type Column**: Is credential type (database, SSH) shown?
-- [ ] **Privilege Level**: Is privilege (admin, root) indicated?
-- [ ] **Source Column**: Is credential source shown (~/.db_creds, bruteforce)?
-- [ ] **Verified Badge**: Are verified credentials marked with a checkmark?
-- [ ] **Test Credential Button**: Is there an option to test credentials?
-
-#### 4.5 Artifacts Tab
-- [ ] **Empty State**: Is there a proper empty state message?
-- [ ] **Icon & Text**: Does empty state have an icon and helpful text?
+Sessions:
+  - 1 active SSH session (admin/root)
+```
 
 ---
 
-### Phase 5: Intelligence Sidebar (if visible)
+## 📋 قائمة الفحص التفصيلية | Detailed Checklist
 
-#### 5.1 AI Co-pilot Panel
-- [ ] **Toggle Button**: Is there a toggle to show/hide the AI panel?
-- [ ] **Panel Visibility**: When opened, does it slide in from the right?
-- [ ] **Recommendations**: Are there AI recommendations or insights?
-- [ ] **Chat Interface**: Is there a chat-like interface?
+### المرحلة 1: التقييم الشامل للصفحة الرئيسية (`/`)
 
----
+#### 1.1 الهيكل والتخطيط
+| العنصر | الفحص | المعيار المؤسسي |
+|--------|-------|-----------------|
+| الترويسة (Header) | [ ] موجودة ومرئية | شعار واضح، navigation breadcrumbs |
+| الشريط الجانبي (Sidebar) | [ ] يعرض القائمة | Icons + Labels، active state واضح |
+| المحتوى الرئيسي | [ ] يملأ المساحة | لا مساحات فارغة كبيرة |
+| مؤشر WebSocket | [ ] يظهر الاتصال | نقطة خضراء/حمراء للحالة |
 
-### Phase 6: Emergency Stop & Control
+#### 1.2 نظام الألوان
+| العنصر | الفحص | المعيار المؤسسي |
+|--------|-------|-----------------|
+| الخلفية | [ ] داكنة متناسقة | zinc-900/950 (#09090b to #18181b) |
+| النص الأساسي | [ ] مقروء | أبيض/رمادي فاتح (#fafafa) |
+| اللون المميز | [ ] أزرق ملكي | Royal Blue (#4169E1) للتفاعلات |
+| ألوان التنبيه | [ ] متناسقة | أحمر=خطر، برتقالي=تحذير، أخضر=نجاح |
 
-#### 6.1 Emergency Stop Button
-- [ ] **Button Visibility**: Is there a prominent red Emergency Stop button?
-- [ ] **Button Position**: Is it easily accessible (fixed position)?
-- [ ] **Button Styling**: Does it look urgent/dangerous (red, bold)?
-- [ ] **Click Behavior**: Does clicking open a confirmation dialog?
-- [ ] **ABORT Confirmation**: Does the dialog require typing "ABORT"?
-- [ ] **Cancel Option**: Can the user cancel the emergency stop?
-
----
-
-### Phase 7: Navigation & Sidebar
-
-#### 7.1 Sidebar Items
-- [ ] **Overview Link**: Link to `/` - Dashboard
-- [ ] **Recon Link**: Link to `/recon` with Target icon
-- [ ] **Operations Link**: Link to `/operations` with Activity icon
-- [ ] **Loot Link**: Link to `/loot` with Key icon
-- [ ] **New Mission Link**: Link to `/mission/new`
-- [ ] **Settings Link**: Link to `/settings`
-
-#### 7.2 Sidebar Behavior
-- [ ] **Active State**: Is the current page highlighted in sidebar?
-- [ ] **Hover Effects**: Do items have hover states?
-- [ ] **Badges**: Do links show dynamic badges (session count, pending approvals)?
-- [ ] **Collapse/Expand**: Can the sidebar be collapsed?
+#### 1.3 الخطوط
+| العنصر | الفحص | المعيار المؤسسي |
+|--------|-------|-----------------|
+| العناوين | [ ] بارزة | Inter Bold 20-24px |
+| النص العادي | [ ] مقروء | Inter Regular 14px |
+| الكود | [ ] monospace | JetBrains Mono |
 
 ---
 
-### Phase 8: Mission Setup Wizard (`/mission/new`)
+### المرحلة 2: صفحة الاستطلاع (`/recon`)
 
-Navigate to: **http://172.245.232.188:3000/mission/new**
+**التنقل إلى:** http://172.245.232.188:3000/recon
 
-#### 8.1 Wizard Structure
-- [ ] **Step Indicator**: Is there a step progress indicator?
-- [ ] **Step 1 - Define Scope**: Is there a form to enter targets?
-- [ ] **Step 2 - Select Intensity**: Is there an intensity selector?
-- [ ] **Step 3 - Launch**: Is there a launch/confirm step?
+#### 2.1 شريط الإحصائيات (Stats Bar)
+| الفحص | التوقع | الأهمية |
+|-------|--------|---------|
+| [ ] بطاقة Targets | عدد = 1 | **حرج** |
+| [ ] بطاقة Open Ports | عدد = 3 | مهم |
+| [ ] بطاقة Vulns | عدد = 2 | **حرج** |
+| [ ] أيقونات ملونة | كل بطاقة بلون مختلف | مهم |
 
-#### 8.2 Form Elements
-- [ ] **Input Fields**: Are text inputs properly styled?
-- [ ] **Buttons**: Are Next/Back/Launch buttons present?
-- [ ] **Validation**: Are there error states for invalid input?
+**تحقق:** إذا كانت الأرقام = 0 رغم وجود البيانات، هذه مشكلة **حرجة**.
 
----
+#### 2.2 شريط الأدوات (Toolbar)
+| الفحص | التوقع |
+|-------|--------|
+| [ ] حقل البحث | placeholder "Search by IP..." |
+| [ ] قائمة التجميع | "No Grouping" default |
+| [ ] أزرار Grid/List | أيقونات واضحة |
+| [ ] عداد الأهداف | "1 targets" |
 
-## QUALITY CRITERIA (Enterprise Standards)
+#### 2.3 بطاقة الهدف (Asset Card) - **أهم عنصر**
+| الفحص | التوقع | ملاحظات |
+|-------|--------|---------|
+| [ ] IP واضح | 172.28.0.100 | خط Mono |
+| [ ] Hostname | vuln-target-001 | تحت الـ IP |
+| [ ] أيقونة OS | Linux/Penguin icon | أو Server icon |
+| [ ] Risk Score | 85.0 باللون الأحمر | badge أو meter |
+| [ ] Port badges | 22, 80, 5432 | chips صغيرة |
+| [ ] Status | "scanned" badge | |
+| [ ] Priority | "high" indicator | برتقالي/أحمر |
 
-### Visual Consistency Score (Rate 1-10)
-| Criteria | Expected |
-|----------|----------|
-| **Color Consistency** | Same accent colors used for same meaning throughout |
-| **Typography Hierarchy** | Clear distinction between headings, body, captions |
-| **Component Consistency** | Same style for similar components (all cards look alike) |
-| **Icon Consistency** | Same icon family, consistent sizing |
-| **Animation/Transitions** | Smooth, subtle animations (not jarring) |
-
-### Usability Score (Rate 1-10)
-| Criteria | Expected |
-|----------|----------|
-| **Information Hierarchy** | Most important info is prominent |
-| **Scannability** | Can quickly scan and find information |
-| **Actionability** | Clear calls to action, obvious buttons |
-| **Feedback** | Hover states, loading states, success/error states |
-| **Error Prevention** | Confirmation dialogs for dangerous actions |
-
-### Enterprise Readiness Score (Rate 1-10)
-| Criteria | Expected |
-|----------|----------|
-| **Professional Appearance** | Looks like Datadog/Splunk/CrowdStrike |
-| **Data Density** | Shows useful data without clutter |
-| **Real-time Updates** | Data updates without page refresh |
-| **Accessibility** | Proper contrast, keyboard navigation |
-| **Branding** | Clear product identity |
+#### 2.4 Drawer التفاصيل
+- [ ] يفتح عند النقر على البطاقة
+- [ ] يعرض تفاصيل الـ target
+- [ ] قائمة الـ ports مع services
+- [ ] قائمة الـ vulnerabilities
+- [ ] زر إغلاق واضح
 
 ---
 
-## ISSUES TO REPORT
+### المرحلة 3: صفحة العمليات (`/operations`)
 
-For each issue found, report:
-1. **Location**: Page URL and component name
-2. **Severity**: Critical / High / Medium / Low
-3. **Description**: What's wrong
-4. **Expected**: What should it look like
-5. **Screenshot**: If possible, capture the issue
-6. **Recommendation**: How to fix it
+**التنقل إلى:** http://172.245.232.188:3000/operations
 
-### Issue Categories
-- **Visual Bug**: Styling issue, misalignment, wrong color
-- **Functional Bug**: Feature not working as expected
-- **UX Issue**: Confusing interaction, missing feedback
-- **Content Issue**: Missing text, wrong label, typo
-- **Performance Issue**: Slow loading, janky animation
+#### 3.1 الـ Timeline
+| الفحص | التوقع |
+|-------|--------|
+| [ ] Timeline مرئي | شريط زمني أو قائمة |
+| [ ] مؤشرات المراحل | Recon → Vuln → Exploit → Post |
+| [ ] بطاقات الأحداث | Events مع timestamps |
+| [ ] ألوان الحالة | أخضر=مكتمل، أصفر=جاري، أحمر=فشل |
 
----
+#### 3.2 إحصائيات سريعة
+- [ ] المرحلة الحالية
+- [ ] عدد الأحداث المكتملة
+- [ ] عدد الأهداف المحققة
 
-## FINAL DELIVERABLES
-
-After completing all tests, provide:
-
-1. **Overall Score** (1-100) with breakdown:
-   - Visual Design: /30
-   - Usability: /30  
-   - Functionality: /25
-   - Enterprise Readiness: /15
-
-2. **Top 5 Strengths**: What the UI does well
-
-3. **Top 5 Critical Issues**: Must-fix before production
-
-4. **Recommendations**: Specific improvements for enterprise-grade appearance
-
-5. **Comparison**: How does this compare to industry standards (Datadog, Splunk, etc.)?
+#### 3.3 قسم الموافقات (HITL)
+- [ ] موجود أو رسالة "No pending approvals"
+- [ ] أزرار Approve/Reject إن وجدت
 
 ---
 
-## NOTES FOR AGENT
+### المرحلة 4: صفحة الغنائم (`/loot`)
 
-- Take your time to explore each page thoroughly
-- Scroll down to see all content
-- Interact with elements (click, hover)
-- Check responsive behavior if possible
-- Focus on details that enterprise customers would notice
-- The goal is a **world-class security operations UI**
+**التنقل إلى:** http://172.245.232.188:3000/loot
 
-**Current Mission ID for testing**: `6b14028c-7f30-4ce6-aad2-20f17eee39d0`
+#### 4.1 ملخص الإحصائيات
+| الفحص | التوقع | القيمة المتوقعة |
+|-------|--------|----------------|
+| [ ] Sessions | badge/counter | 1 |
+| [ ] Credentials | badge/counter | 2 |
+| [ ] Privileged | badge/counter | 2 (admin + root) |
+| [ ] Artifacts | badge/counter | 0 |
+
+#### 4.2 التبويبات (Tabs)
+- [ ] Tab "Sessions" - badge (1)
+- [ ] Tab "Credentials" - badge (2)
+- [ ] Tab "Artifacts" - badge (0)
+- [ ] Active tab مميز بصرياً
+
+#### 4.3 جدول Credentials (مهم جداً)
+| الفحص | التوقع |
+|-------|--------|
+| [ ] Username: postgres | مرئي |
+| [ ] Username: admin | مرئي |
+| [ ] Password masked | •••••••• |
+| [ ] Type column | database, SSH |
+| [ ] Privilege column | admin, root |
+| [ ] Verified badge | ✓ checkmark |
+
+#### 4.4 جدول Sessions
+| الفحص | التوقع |
+|-------|--------|
+| [ ] Session type | SSH |
+| [ ] User | admin |
+| [ ] Privilege | root |
+| [ ] Status | active (green) |
+| [ ] Target | 172.28.0.100 |
+
+---
+
+### المرحلة 5: الأمان والتحكم
+
+#### 5.1 زر الإيقاف الطارئ (Emergency Stop)
+| الفحص | التوقع | الأهمية |
+|-------|--------|---------|
+| [ ] الزر مرئي | في Header أو fixed position | **حرج** |
+| [ ] اللون أحمر | تصميم "خطر" | **حرج** |
+| [ ] النقر يفتح dialog | نافذة تأكيد | **حرج** |
+| [ ] يطلب كتابة "ABORT" | input field | مهم |
+
+---
+
+### المرحلة 6: التنقل (Navigation)
+
+#### 6.1 عناصر الشريط الجانبي
+| الرابط | الأيقونة | الوجهة |
+|--------|---------|--------|
+| [ ] Overview | Home/Grid | `/` |
+| [ ] Recon | Target/Crosshair | `/recon` |
+| [ ] Operations | Activity/Play | `/operations` |
+| [ ] Loot | Key/Lock | `/loot` |
+| [ ] New Mission | Plus | `/mission/new` |
+| [ ] Settings | Settings/Cog | `/settings` |
+
+#### 6.2 سلوك التنقل
+- [ ] Active state واضح للصفحة الحالية
+- [ ] Hover effect على العناصر
+- [ ] Badges ديناميكية (إن وجدت)
+
+---
+
+## 📏 معايير الجودة المؤسسية | Enterprise Quality Criteria
+
+### التصميم البصري (30 نقطة)
+| المعيار | الوزن | التقييم |
+|---------|-------|---------|
+| تناسق الألوان | 8 | /10 |
+| Typography hierarchy | 7 | /10 |
+| تناسق المكونات | 8 | /10 |
+| استخدام الأيقونات | 4 | /10 |
+| الحركات والانتقالات | 3 | /10 |
+
+### قابلية الاستخدام (30 نقطة)
+| المعيار | الوزن | التقييم |
+|---------|-------|---------|
+| هرمية المعلومات | 8 | /10 |
+| سهولة المسح البصري | 7 | /10 |
+| وضوح الإجراءات | 7 | /10 |
+| التغذية الراجعة | 5 | /10 |
+| منع الأخطاء | 3 | /10 |
+
+### الجاهزية المؤسسية (25 نقطة)
+| المعيار | الوزن | التقييم |
+|---------|-------|---------|
+| المظهر الاحترافي | 8 | /10 |
+| كثافة البيانات | 6 | /10 |
+| التحديثات الفورية | 5 | /10 |
+| Accessibility | 3 | /10 |
+| الهوية البصرية | 3 | /10 |
+
+### الوظائف (15 نقطة)
+| المعيار | الوزن | التقييم |
+|---------|-------|---------|
+| عمل جميع الميزات | 8 | /10 |
+| تحميل البيانات | 4 | /10 |
+| التصدير | 3 | /10 |
+
+---
+
+## 🐛 نموذج الإبلاغ عن المشاكل | Issue Report Template
+
+```markdown
+### المشكلة: [عنوان قصير]
+
+**الموقع:** [URL + اسم المكون]
+**الخطورة:** Critical / High / Medium / Low
+**الفئة:** Visual Bug / Functional Bug / UX Issue / Content Issue
+
+**الوصف:**
+[ما هي المشكلة بالضبط]
+
+**المتوقع:**
+[كيف يجب أن يبدو/يعمل]
+
+**التوصية:**
+[كيفية الإصلاح]
+
+**لقطة شاشة:** [إن أمكن]
+```
+
+---
+
+## ✅ التسليمات المطلوبة | Required Deliverables
+
+### 1. الدرجة الإجمالية (/100)
+```
+التصميم البصري:     /30
+قابلية الاستخدام:   /30
+الجاهزية المؤسسية: /25
+الوظائف:          /15
+────────────────────
+المجموع:          /100
+```
+
+### 2. أفضل 5 نقاط قوة
+1. ...
+2. ...
+3. ...
+4. ...
+5. ...
+
+### 3. أهم 5 مشاكل حرجة
+1. ...
+2. ...
+3. ...
+4. ...
+5. ...
+
+### 4. توصيات محددة للتحسين
+- توصية 1: ...
+- توصية 2: ...
+- ...
+
+### 5. مقارنة مع المنافسين
+| المعيار | RAGLOX | Datadog | Splunk | CrowdStrike |
+|---------|--------|---------|--------|-------------|
+| المظهر | | | | |
+| البيانات | | | | |
+| التفاعل | | | | |
+
+---
+
+## 🔍 ملاحظات مهمة للوكيل | Agent Notes
+
+### أثناء الاختبار:
+1. **تصفح كل صفحة بالكامل** - scroll down
+2. **تفاعل مع العناصر** - انقر، مرر الماوس
+3. **انتظر تحميل البيانات** - قد يستغرق 3-5 ثواني
+4. **تحقق من الكونسول** - ابحث عن أخطاء JavaScript
+
+### مشاكل معروفة قد تواجهها:
+- ⚠️ التحميل الأولي قد يكون بطيء (10-15 ثانية)
+- ⚠️ HMR قد يسبب إعادة تحميل
+- ✅ البيانات يجب أن تظهر: 1 target, 2 vulns, 2 creds, 1 session
+
+### الهدف النهائي:
+**واجهة أمنية على مستوى عالمي تنافس CrowdStrike و Splunk**
+
+---
+
+## 📌 معلومات المهمة | Mission Info
+
+- **Mission ID:** `6b14028c-7f30-4ce6-aad2-20f17eee39d0`
+- **اسم المهمة:** Field Acceptance Test
+- **الحالة:** Running
+- **Target IP:** 172.28.0.100
+
+---
+
+*آخر تحديث: 2026-01-02*
+*الإصدار: 3.0.1*
