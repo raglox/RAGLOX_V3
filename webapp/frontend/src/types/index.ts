@@ -283,3 +283,98 @@ export interface DrawerState {
   type?: 'target' | 'approval' | 'ai'
   data?: Target | ApprovalRequest | null
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Workspace Types
+// ═══════════════════════════════════════════════════════════════
+
+export type WorkspaceId = 'recon' | 'operations' | 'loot' | 'intelligence'
+
+export interface WorkspaceConfig {
+  id: WorkspaceId
+  title: string
+  description: string
+  icon: string // Icon name from lucide-react
+  badge?: string | number
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Exploitability Matrix Types
+// ═══════════════════════════════════════════════════════════════
+
+export interface ExploitPath {
+  id: string
+  vuln_id: string
+  finding: string
+  technique: string
+  impact: string
+  probability: number // 0-1
+  prerequisites: string[]
+  mitigations: string[]
+}
+
+export interface ExploitabilityNode {
+  id: string
+  type: 'vulnerability' | 'technique' | 'impact'
+  label: string
+  severity?: Severity
+  status: 'potential' | 'confirmed' | 'exploited'
+}
+
+export interface ExploitabilityLink {
+  source: string
+  target: string
+  probability: number
+}
+
+export interface ExploitabilityMatrix {
+  nodes: ExploitabilityNode[]
+  links: ExploitabilityLink[]
+  paths: ExploitPath[]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AI Co-pilot Types
+// ═══════════════════════════════════════════════════════════════
+
+export interface AIInsight {
+  id: string
+  type: 'finding' | 'recommendation' | 'warning' | 'opportunity'
+  title: string
+  description: string
+  priority: Priority
+  related_target_id?: string
+  related_vuln_id?: string
+  suggested_action?: string
+  timestamp: string
+}
+
+export interface AIContext {
+  current_phase: string
+  active_targets: number
+  critical_vulns: number
+  pending_actions: number
+  recent_findings: AIInsight[]
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Enhanced HITL Types
+// ═══════════════════════════════════════════════════════════════
+
+export interface RiskAssessment {
+  overall_risk: RiskLevel
+  detection_probability: number // 0-1
+  impact_severity: Severity
+  reversibility: 'fully_reversible' | 'partially_reversible' | 'irreversible'
+  time_sensitivity: 'immediate' | 'time_critical' | 'flexible'
+}
+
+export interface EnhancedApprovalRequest extends ApprovalRequest {
+  ai_recommendation: 'approve' | 'deny' | 'review'
+  ai_reasoning: string
+  risk_assessment: RiskAssessment
+  alternative_actions?: Array<{
+    description: string
+    risk_level: RiskLevel
+  }>
+}
