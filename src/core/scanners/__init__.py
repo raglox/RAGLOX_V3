@@ -3,10 +3,20 @@
 # Security scanning tools integration
 # ═══════════════════════════════════════════════════════════════
 
-from .nuclei import NucleiScanner, NucleiScanResult, NucleiVulnerability
+from .nuclei import (
+    NucleiScanner,
+    NucleiScanResult,
+    NucleiVulnerability,
+    NucleiSeverity,
+    RX_MODULE_PREFIX,
+    RX_NUCLEI_PREFIX,
+)
 
 __all__ = [
     "NucleiScanner",
     "NucleiScanResult",
     "NucleiVulnerability",
+    "NucleiSeverity",
+    "RX_MODULE_PREFIX",
+    "RX_NUCLEI_PREFIX",
 ]
