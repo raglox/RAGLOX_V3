@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // RAGLOX v3.0 - Main Layout Component
-// Enterprise layout with sidebar, header, console
+// Clean, minimal layout with floating elements
+// Inspired by Manus.im / Modern Agentic Design
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
@@ -19,7 +20,7 @@ export function Layout({ children }: LayoutProps) {
   const { isSidebarCollapsed, isConsoleExpanded } = useEventStore()
   
   return (
-    <div className="min-h-screen bg-bg-dark">
+    <div className="min-h-screen bg-gradient-to-b from-bg-dark via-bg-dark to-[#020617]">
       {/* Sidebar */}
       <Sidebar />
       
@@ -29,12 +30,12 @@ export function Layout({ children }: LayoutProps) {
       {/* Main Content Area */}
       <main
         className={cn(
-          'pt-20 transition-all duration-300 ease-in-out',
-          isSidebarCollapsed ? 'ml-16' : 'ml-64',
-          isConsoleExpanded ? 'pb-72' : 'pb-14'
+          'pt-16 transition-all duration-300 ease-out',
+          isSidebarCollapsed ? 'ml-[72px]' : 'ml-56',
+          isConsoleExpanded ? 'pb-64' : 'pb-12'
         )}
       >
-        <div className="px-6 py-4">{children}</div>
+        <div className="px-6 py-6">{children}</div>
       </main>
       
       {/* Global Console */}

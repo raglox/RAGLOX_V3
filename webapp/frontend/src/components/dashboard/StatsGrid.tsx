@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // RAGLOX v3.0 - StatsGrid Component
-// 4 professional metric cards with clear borders and shadows
+// Floating cards with soft shadows, no borders
+// Inspired by Manus.im / Modern Agentic Design
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
@@ -27,23 +28,23 @@ interface StatCardProps {
 const variantStyles = {
   default: {
     value: 'text-royal-blue',
-    icon: 'bg-royal-blue/10 text-royal-blue border border-royal-blue/20',
-    border: 'border-royal-blue/30 hover:border-royal-blue/50',
+    icon: 'bg-blue-50 text-royal-blue',
+    badge: 'bg-blue-50 text-blue-700',
   },
   critical: {
     value: 'text-critical',
-    icon: 'bg-critical/10 text-critical border border-critical/20',
-    border: 'border-critical/30 hover:border-critical/50',
+    icon: 'bg-red-50 text-critical',
+    badge: 'bg-red-50 text-red-700',
   },
   warning: {
     value: 'text-warning',
-    icon: 'bg-warning/10 text-warning border border-warning/20',
-    border: 'border-warning/30 hover:border-warning/50',
+    icon: 'bg-amber-50 text-warning',
+    badge: 'bg-amber-50 text-amber-700',
   },
   success: {
     value: 'text-success',
-    icon: 'bg-success/10 text-success border border-success/20',
-    border: 'border-success/30 hover:border-success/50',
+    icon: 'bg-emerald-50 text-success',
+    badge: 'bg-emerald-50 text-emerald-700',
   },
 }
 
@@ -53,43 +54,33 @@ function StatCard({ title, value, icon: Icon, trend, variant = 'default' }: Stat
   return (
     <div
       className={cn(
-        'relative rounded-xl border-2 bg-bg-card-dark p-5 shadow-lg',
-        'transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5',
-        styles.border
+        'relative rounded-2xl p-5',
+        'glass border border-white/5',
+        'shadow-lg hover:shadow-xl',
+        'transition-all duration-300 hover:-translate-y-0.5'
       )}
     >
-      {/* Top accent line */}
-      <div
-        className={cn(
-          'absolute top-0 left-4 right-4 h-1 rounded-b-full',
-          variant === 'default' && 'bg-royal-blue',
-          variant === 'critical' && 'bg-critical',
-          variant === 'warning' && 'bg-warning',
-          variant === 'success' && 'bg-success'
-        )}
-      />
-      
-      <div className="flex items-start justify-between pt-2">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-text-secondary-dark uppercase tracking-wide">
+      <div className="flex items-start justify-between">
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-text-muted-dark uppercase tracking-wide">
             {title}
           </p>
-          <p className={cn('text-4xl font-bold tracking-tight', styles.value)}>
+          <p className={cn('text-3xl font-semibold tracking-tight text-text-primary-dark')}>
             {value.toLocaleString()}
           </p>
           {trend && (
             <p
               className={cn(
-                'text-xs font-medium mt-2',
-                trend.isPositive ? 'text-success' : 'text-critical'
+                'text-xs font-medium inline-flex items-center gap-1 px-2 py-0.5 rounded-full',
+                trend.isPositive ? styles.badge : 'bg-red-50 text-red-700'
               )}
             >
-              {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}% from last hour
+              {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}%
             </p>
           )}
         </div>
-        <div className={cn('p-3 rounded-xl', styles.icon)}>
-          <Icon className="h-7 w-7" />
+        <div className={cn('p-2.5 rounded-xl', styles.icon)}>
+          <Icon className="h-5 w-5" />
         </div>
       </div>
     </div>
@@ -106,7 +97,7 @@ export function StatsGrid() {
   , [sessions])
   
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       <StatCard
         title="Targets Discovered"
         value={missionStats.targets_discovered}

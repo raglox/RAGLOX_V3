@@ -119,6 +119,7 @@ interface EventStoreActions {
   setSelectedTarget: (targetId: string | null) => void
   toggleConsole: () => void
   toggleSidebar: () => void
+  setSidebarCollapsed: (collapsed: boolean) => void
   toggleAIPanel: () => void
   
   // Graph
@@ -377,6 +378,9 @@ export const useEventStore = create<EventStoreState & EventStoreActions>()(
       
       toggleSidebar: () =>
         set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+      
+      setSidebarCollapsed: (collapsed: boolean) =>
+        set({ isSidebarCollapsed: collapsed }),
       
       toggleAIPanel: () =>
         set((state) => ({ isAIPanelOpen: !state.isAIPanelOpen })),

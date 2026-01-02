@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // RAGLOX v3.0 - Global Console Component
-// Professional collapsible footer bar (VS Code terminal style)
+// Minimal, floating console bar
+// Inspired by Manus.im / Modern Agentic Design
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
@@ -29,16 +30,9 @@ const logIcons = {
 
 const logColors = {
   debug: 'text-text-muted-dark',
-  info: 'text-info',
+  info: 'text-royal-blue',
   warning: 'text-warning',
   error: 'text-critical',
-}
-
-const logBgColors = {
-  debug: 'bg-text-muted-dark/5',
-  info: 'bg-info/5',
-  warning: 'bg-warning/5',
-  error: 'bg-critical/5',
 }
 
 export function GlobalConsole() {
@@ -60,68 +54,62 @@ export function GlobalConsole() {
   return (
     <div
       className={cn(
-        'fixed bottom-0 right-0 z-30 border-t-2 border-border-dark bg-bg-card-dark shadow-2xl',
-        'transition-all duration-300 ease-in-out',
-        isSidebarCollapsed ? 'left-16' : 'left-64',
-        isConsoleExpanded ? 'h-72' : 'h-12'
+        'fixed bottom-0 right-0 z-30 glass border-t border-white/5',
+        'transition-all duration-300 ease-out',
+        isSidebarCollapsed ? 'left-[72px]' : 'left-56',
+        isConsoleExpanded ? 'h-60' : 'h-10'
       )}
     >
-      {/* Header Bar */}
+      {/* Header Bar - Minimal */}
       <div
-        className="flex h-12 items-center justify-between px-5 cursor-pointer hover:bg-bg-elevated-dark/30 border-b border-border-dark/50"
+        className="flex h-10 items-center justify-between px-4 cursor-pointer hover:bg-white/5 transition-colors"
         onClick={toggleConsole}
       >
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-royal-blue/10 border border-royal-blue/20">
-              <Terminal className="h-4 w-4 text-royal-blue" />
-            </div>
-            <span className="text-sm font-semibold text-text-primary-dark">Console</span>
-          </div>
-          
-          {/* Log count badge */}
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-elevated-dark border border-border-dark text-xs font-medium text-text-muted-dark">
-            {logs.length} logs
-          </span>
+        <div className="flex items-center gap-3">
+          <Terminal className="h-3.5 w-3.5 text-text-muted-dark" />
+          <span className="text-xs font-medium text-text-secondary-dark">Console</span>
           
           {/* Last log preview (when collapsed) */}
           {!isConsoleExpanded && lastLog && (
-            <>
-              <div className="h-5 w-px bg-border-dark/50" />
-              <LogPreview log={lastLog} />
-            </>
+            <LogPreview log={lastLog} />
           )}
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {logs.length > 0 && (
+            <span className="text-[10px] text-text-muted-dark">
+              {logs.length} logs
+            </span>
+          )}
+          
           {isConsoleExpanded && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg border border-transparent hover:border-border-dark/50"
+              className="h-6 w-6 rounded-lg hover:bg-white/5"
               onClick={(e) => {
                 e.stopPropagation()
                 clearLogs()
               }}
               title="Clear logs"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3 w-3" />
             </Button>
           )}
           
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-lg border border-transparent hover:border-border-dark/50"
+            className="h-6 w-6 rounded-lg hover:bg-white/5"
             onClick={(e) => {
               e.stopPropagation()
               toggleConsole()
             }}
           >
             {isConsoleExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-3 w-3" />
             ) : (
-              <ChevronUp className="h-4 w-4" />
+              <ChevronUp className="h-3 w-3" />
             )}
           </Button>
         </div>
@@ -131,15 +119,14 @@ export function GlobalConsole() {
       {isConsoleExpanded && (
         <div
           ref={consoleRef}
-          className="h-[calc(100%-3rem)] overflow-y-auto font-mono text-sm p-3 bg-bg-dark/50"
+          className="h-[calc(100%-2.5rem)] overflow-y-auto font-mono text-xs px-4 py-2"
         >
           {logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-text-muted-dark">
-              <Terminal className="h-8 w-8 opacity-30 mb-3" />
-              <span className="text-sm">No logs yet. Waiting for events...</span>
+            <div className="flex items-center justify-center h-full text-text-muted-dark">
+              <span className="text-xs">Waiting for logs...</span>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {logs.map((log) => (
                 <LogEntry key={log.id} log={log} />
               ))}
@@ -156,49 +143,39 @@ function LogPreview({ log }: { log: TaskExecutionLog }) {
   const Icon = logIcons[log.level]
   
   return (
-    <div className="flex items-center gap-2 text-sm overflow-hidden max-w-md">
-      <Icon className={cn('h-3.5 w-3.5 flex-shrink-0', logColors[log.level])} />
-      <span className="text-text-muted-dark text-xs font-mono">
+    <div className="flex items-center gap-2 text-xs overflow-hidden max-w-lg ml-2">
+      <Icon className={cn('h-3 w-3 flex-shrink-0', logColors[log.level])} />
+      <span className="text-text-muted-dark/70 font-mono text-[10px]">
         {formatTimestamp(log.timestamp)}
       </span>
-      <span className={cn('truncate text-xs', logColors[log.level])}>
+      <span className={cn('truncate text-[11px]', logColors[log.level])}>
         {log.message}
       </span>
     </div>
   )
 }
 
-// Full Log Entry (for expanded console)
+// Full Log Entry (for expanded console) - Compact
 function LogEntry({ log }: { log: TaskExecutionLog }) {
   const Icon = logIcons[log.level]
   
   return (
-    <div className={cn(
-      'flex items-start gap-3 py-2 px-3 rounded-lg border border-transparent',
-      'hover:border-border-dark/30 transition-colors',
-      logBgColors[log.level]
-    )}>
-      <Icon className={cn('h-4 w-4 flex-shrink-0 mt-0.5', logColors[log.level])} />
+    <div className="flex items-start gap-2 py-1 hover:bg-white/5 px-2 -mx-2 rounded transition-colors">
+      <Icon className={cn('h-3 w-3 flex-shrink-0 mt-0.5', logColors[log.level])} />
       
-      <span className="text-text-muted-dark text-xs flex-shrink-0 w-20 font-mono">
+      <span className="text-text-muted-dark/60 text-[10px] flex-shrink-0 w-16">
         {formatTimestamp(log.timestamp)}
       </span>
       
       {log.specialist && (
-        <span className="text-royal-blue text-xs flex-shrink-0 w-28 truncate font-semibold">
-          [{log.specialist}]
+        <span className="text-royal-blue/70 text-[10px] flex-shrink-0 w-24 truncate">
+          {log.specialist}
         </span>
       )}
       
-      <span className={cn('flex-1 text-xs', logColors[log.level])}>
+      <span className={cn('flex-1 text-[11px]', logColors[log.level])}>
         {log.message}
       </span>
-      
-      {log.target_id && (
-        <span className="text-text-muted-dark text-xs font-mono px-2 py-0.5 rounded bg-bg-elevated-dark border border-border-dark/30">
-          {log.target_id.slice(0, 8)}
-        </span>
-      )}
     </div>
   )
 }

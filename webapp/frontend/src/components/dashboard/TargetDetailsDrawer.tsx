@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-// RAGLOX v3.0 - Target Details Drawer
-// Slide-over panel showing detailed target information
+// RAGLOX v3.0 - Target Details Drawer (Identity Card Style)
+// Large identity card with OS logo and status stamp
+// Inspired by Manus.im / Modern Agentic Design
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
@@ -13,16 +14,25 @@ import {
   Terminal,
   RefreshCw,
   Crosshair,
+  X,
+  ShieldAlert,
+  Laptop,
+  HardDrive,
 } from 'lucide-react'
-import { Drawer } from '@/components/ui/Drawer'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { Card } from '@/components/ui/Card'
 import { useEventStore } from '@/stores/eventStore'
 import type { Vulnerability, Session } from '@/types'
 
+// OS Icons mapping
+const osIcons: Record<string, React.ElementType> = {
+  windows: Monitor,
+  linux: Terminal,
+  macos: Laptop,
+  unknown: Server,
+}
+
 export function TargetDetailsDrawer() {
-  // Get primitive values and functions directly, avoid selectors that create new arrays
   const selectedTargetId = useEventStore((state) => state.selectedTargetId)
   const targets = useEventStore((state) => state.targets)
   const vulnerabilities = useEventStore((state) => state.vulnerabilities)
@@ -30,7 +40,6 @@ export function TargetDetailsDrawer() {
   const setSelectedTarget = useEventStore((state) => state.setSelectedTarget)
   const addToast = useEventStore((state) => state.addToast)
   
-  // Derive computed values using useMemo to avoid recalculation
   const selectedTarget = React.useMemo(() => 
     selectedTargetId ? targets.get(selectedTargetId) : null
   , [selectedTargetId, targets])
@@ -57,7 +66,6 @@ export function TargetDetailsDrawer() {
       title: 'Scan Initiated',
       description: `Starting scan for ${selectedTarget?.ip}`,
     })
-    // In production, this would call the API
   }
   
   const handleExploit = async () => {
@@ -75,153 +83,186 @@ export function TargetDetailsDrawer() {
       title: 'Exploit Queued',
       description: 'Exploitation attempt has been queued.',
     })
-    // In production, this would call the API
   }
   
   if (!selectedTarget) return null
   
-  const statusColors: Record<string, 'success' | 'warning' | 'critical' | 'secondary'> = {
-    discovered: 'secondary',
-    scanning: 'warning',
-    scanned: 'success',
-    exploiting: 'warning',
-    exploited: 'critical',
-    owned: 'critical',
-    failed: 'secondary',
-  }
+  // Determine OS icon
+  const osType = selectedTarget.os?.toLowerCase().includes('windows') ? 'windows'
+    : selectedTarget.os?.toLowerCase().includes('linux') ? 'linux'
+    : selectedTarget.os?.toLowerCase().includes('mac') ? 'macos'
+    : 'unknown'
+  const OsIcon = osIcons[osType]
   
-  const priorityColors: Record<string, 'critical' | 'warning' | 'success' | 'secondary'> = {
-    critical: 'critical',
-    high: 'warning',
-    medium: 'secondary',
-    low: 'success',
-  }
+  const isCompromised = selectedTarget.status === 'exploited' || selectedTarget.status === 'owned'
   
   return (
-    <Drawer
-      isOpen={!!selectedTargetId}
-      onClose={handleClose}
-      title={selectedTarget.hostname || selectedTarget.ip}
-      description="Target Details"
-      width="lg"
-    >
-      {/* Status and Priority */}
-      <div className="flex items-center gap-2 mb-6">
-        <Badge variant={statusColors[selectedTarget.status]}>
-          {selectedTarget.status}
-        </Badge>
-        <Badge variant={priorityColors[selectedTarget.priority ?? 'medium']}>
-          {selectedTarget.priority ?? 'medium'} priority
-        </Badge>
-        {selectedTarget.risk_score && (
-          <Badge variant="outline">
-            Risk: {selectedTarget.risk_score.toFixed(1)}
-          </Badge>
-        )}
-      </div>
+    <>
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-fade-in"
+        onClick={handleClose}
+      />
       
-      {/* Basic Info */}
-      <Card className="p-4 mb-4">
-        <h4 className="text-sm font-medium text-text-secondary-dark mb-3">
-          System Information
-        </h4>
-        <div className="grid grid-cols-2 gap-4">
-          <InfoRow icon={Globe} label="IP Address" value={selectedTarget.ip} />
-          <InfoRow
-            icon={Monitor}
-            label="Hostname"
-            value={selectedTarget.hostname || 'Unknown'}
-          />
-          <InfoRow
-            icon={Server}
-            label="Operating System"
-            value={selectedTarget.os || 'Unknown'}
-          />
-          <InfoRow
-            icon={Shield}
-            label="Status"
-            value={selectedTarget.status}
-          />
-        </div>
-      </Card>
-      
-      {/* Open Ports */}
-      <Card className="p-4 mb-4">
-        <h4 className="text-sm font-medium text-text-secondary-dark mb-3">
-          Open Ports ({Object.keys(selectedTarget.ports).length})
-        </h4>
-        {Object.keys(selectedTarget.ports).length > 0 ? (
-          <div className="space-y-2">
-            {Object.entries(selectedTarget.ports).map(([port, service]) => (
-              <div
-                key={port}
-                className="flex items-center justify-between py-2 px-3 rounded bg-bg-elevated-dark"
-              >
-                <span className="font-mono text-sm text-royal-blue">{port}</span>
-                <span className="text-sm text-text-secondary-dark">{service}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-text-muted-dark">No ports discovered yet</p>
-        )}
-      </Card>
-      
-      {/* Vulnerabilities */}
-      <Card className="p-4 mb-4">
-        <h4 className="text-sm font-medium text-text-secondary-dark mb-3">
-          <Bug className="h-4 w-4 inline mr-1" />
-          Vulnerabilities ({targetVulns.length})
-        </h4>
-        {targetVulns.length > 0 ? (
-          <div className="space-y-2">
-            {targetVulns.map((vuln) => (
-              <VulnRow key={vuln.vuln_id} vuln={vuln} />
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-text-muted-dark">No vulnerabilities found</p>
-        )}
-      </Card>
-      
-      {/* Active Sessions */}
-      <Card className="p-4 mb-6">
-        <h4 className="text-sm font-medium text-text-secondary-dark mb-3">
-          <Terminal className="h-4 w-4 inline mr-1" />
-          Active Sessions ({targetSessions.length})
-        </h4>
-        {targetSessions.length > 0 ? (
-          <div className="space-y-2">
-            {targetSessions.map((session) => (
-              <SessionRow key={session.session_id} session={session} />
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-text-muted-dark">No active sessions</p>
-        )}
-      </Card>
-      
-      {/* Action Buttons */}
-      <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 gap-2" onClick={handleScanAgain}>
-          <RefreshCw className="h-4 w-4" />
-          Scan Again
-        </Button>
-        <Button
-          className="flex-1 gap-2"
-          onClick={handleExploit}
-          disabled={targetVulns.length === 0}
+      {/* Drawer */}
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md glass border-l border-white/5 shadow-2xl animate-slide-in-right overflow-y-auto">
+        {/* Close Button */}
+        <button
+          onClick={handleClose}
+          className="absolute top-4 right-4 p-2 rounded-xl hover:bg-white/5 transition-colors"
         >
-          <Crosshair className="h-4 w-4" />
-          Exploit
-        </Button>
+          <X className="h-5 w-5 text-text-muted-dark" />
+        </button>
+        
+        {/* Identity Card Header */}
+        <div className="p-6 pt-12">
+          <div className="flex items-start gap-4">
+            {/* Large OS Icon */}
+            <div className={cn(
+              'p-4 rounded-2xl',
+              isCompromised ? 'bg-red-50' : 'bg-blue-50'
+            )}>
+              <OsIcon className={cn(
+                'h-10 w-10',
+                isCompromised ? 'text-critical' : 'text-royal-blue'
+              )} />
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              {/* Big IP Address */}
+              <h2 className="text-2xl font-semibold text-text-primary-dark font-mono">
+                {selectedTarget.ip}
+              </h2>
+              <p className="text-sm text-text-muted-dark mt-1">
+                {selectedTarget.hostname || 'Unknown hostname'}
+              </p>
+              
+              {/* Status Badges */}
+              <div className="flex items-center gap-2 mt-3">
+                {isCompromised && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-xs font-medium">
+                    <ShieldAlert className="h-3 w-3" />
+                    COMPROMISED
+                  </span>
+                )}
+                <span className={cn(
+                  'px-2.5 py-1 rounded-lg text-xs font-medium',
+                  selectedTarget.priority === 'critical' ? 'bg-red-50 text-red-700' :
+                  selectedTarget.priority === 'high' ? 'bg-amber-50 text-amber-700' :
+                  'bg-slate-100 text-slate-600'
+                )}>
+                  {selectedTarget.priority || 'medium'} priority
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Divider */}
+        <div className="h-px bg-white/5 mx-6" />
+        
+        {/* System Info - Compact */}
+        <div className="p-6">
+          <h3 className="text-xs font-medium text-text-muted-dark uppercase tracking-wide mb-3">
+            System Information
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <InfoItem icon={HardDrive} label="OS" value={selectedTarget.os || 'Unknown'} />
+            <InfoItem icon={Shield} label="Status" value={selectedTarget.status} />
+            <InfoItem icon={Globe} label="Ports" value={`${Object.keys(selectedTarget.ports).length} open`} />
+            <InfoItem icon={Bug} label="Vulns" value={`${targetVulns.length} found`} />
+          </div>
+        </div>
+        
+        {/* Open Ports - Compact Table */}
+        {Object.keys(selectedTarget.ports).length > 0 && (
+          <div className="px-6 pb-6">
+            <h3 className="text-xs font-medium text-text-muted-dark uppercase tracking-wide mb-3">
+              Open Ports
+            </h3>
+            <div className="space-y-1">
+              {Object.entries(selectedTarget.ports).slice(0, 6).map(([port, service]) => (
+                <div
+                  key={port}
+                  className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  <span className="font-mono text-sm text-royal-blue">{port}</span>
+                  <span className="text-xs text-text-muted-dark">{service}</span>
+                </div>
+              ))}
+              {Object.keys(selectedTarget.ports).length > 6 && (
+                <p className="text-xs text-text-muted-dark text-center py-2">
+                  +{Object.keys(selectedTarget.ports).length - 6} more ports
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Vulnerabilities - Minimal List */}
+        {targetVulns.length > 0 && (
+          <div className="px-6 pb-6">
+            <h3 className="text-xs font-medium text-text-muted-dark uppercase tracking-wide mb-3">
+              Vulnerabilities
+            </h3>
+            <div className="space-y-2">
+              {targetVulns.slice(0, 4).map((vuln) => (
+                <VulnItem key={vuln.vuln_id} vuln={vuln} />
+              ))}
+              {targetVulns.length > 4 && (
+                <p className="text-xs text-text-muted-dark text-center py-2">
+                  +{targetVulns.length - 4} more vulnerabilities
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Sessions */}
+        {targetSessions.length > 0 && (
+          <div className="px-6 pb-6">
+            <h3 className="text-xs font-medium text-text-muted-dark uppercase tracking-wide mb-3">
+              Active Sessions
+            </h3>
+            <div className="space-y-2">
+              {targetSessions.map((session) => (
+                <SessionItem key={session.session_id} session={session} />
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Action Buttons - Sticky Bottom */}
+        <div className="sticky bottom-0 p-6 pt-4 bg-gradient-to-t from-bg-dark via-bg-dark to-transparent">
+          <div className="flex gap-3">
+            <Button 
+              variant="ghost" 
+              className="flex-1 gap-2 rounded-xl hover:bg-white/5" 
+              onClick={handleScanAgain}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Scan Again
+            </Button>
+            <Button
+              className={cn(
+                'flex-1 gap-2 rounded-xl',
+                targetVulns.length === 0 && 'opacity-50'
+              )}
+              onClick={handleExploit}
+              disabled={targetVulns.length === 0}
+            >
+              <Crosshair className="h-4 w-4" />
+              Exploit
+            </Button>
+          </div>
+        </div>
       </div>
-    </Drawer>
+    </>
   )
 }
 
-// Info Row Component
-function InfoRow({
+// Info Item Component
+function InfoItem({
   icon: Icon,
   label,
   value,
@@ -232,79 +273,63 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Icon className="h-4 w-4 text-text-muted-dark" />
+      <Icon className="h-4 w-4 text-text-muted-dark/50" />
       <div>
-        <p className="text-xs text-text-muted-dark">{label}</p>
+        <p className="text-[10px] text-text-muted-dark uppercase">{label}</p>
         <p className="text-sm text-text-primary-dark">{value}</p>
       </div>
     </div>
   )
 }
 
-// Vulnerability Row Component
-function VulnRow({ vuln }: { vuln: Vulnerability }) {
-  const severityColors: Record<string, 'critical' | 'warning' | 'success' | 'secondary'> = {
-    critical: 'critical',
-    high: 'warning',
-    medium: 'secondary',
-    low: 'success',
-    info: 'secondary',
-  }
-  
+// Vulnerability Item Component
+function VulnItem({ vuln }: { vuln: Vulnerability }) {
   return (
-    <div className="flex items-center justify-between py-2 px-3 rounded bg-bg-elevated-dark">
-      <div className="flex-1">
-        <p className="text-sm text-text-primary-dark">{vuln.type}</p>
+    <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-text-primary-dark truncate">{vuln.type}</p>
         {vuln.name && (
-          <p className="text-xs text-text-muted-dark">{vuln.name}</p>
+          <p className="text-xs text-text-muted-dark truncate">{vuln.name}</p>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
         {vuln.cvss && (
-          <span className="text-xs font-mono text-text-muted-dark">
-            CVSS: {vuln.cvss.toFixed(1)}
+          <span className="text-[10px] font-mono text-text-muted-dark">
+            {vuln.cvss.toFixed(1)}
           </span>
         )}
-        <Badge variant={severityColors[vuln.severity]} className="text-xs">
+        <span className={cn(
+          'px-1.5 py-0.5 rounded text-[10px] font-medium',
+          vuln.severity === 'critical' ? 'bg-red-50 text-red-700' :
+          vuln.severity === 'high' ? 'bg-amber-50 text-amber-700' :
+          'bg-slate-100 text-slate-600'
+        )}>
           {vuln.severity}
-        </Badge>
-        {vuln.exploit_available && (
-          <Badge variant="critical" className="text-xs">
-            Exploit
-          </Badge>
-        )}
+        </span>
       </div>
     </div>
   )
 }
 
-// Session Row Component
-function SessionRow({ session }: { session: Session }) {
-  const statusColors: Record<string, 'success' | 'warning' | 'secondary'> = {
-    active: 'success',
-    idle: 'warning',
-    dead: 'secondary',
-  }
-  
+// Session Item Component
+function SessionItem({ session }: { session: Session }) {
   return (
-    <div className="flex items-center justify-between py-2 px-3 rounded bg-bg-elevated-dark">
+    <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-white/5 transition-colors">
       <div className="flex items-center gap-2">
-        <Terminal className="h-4 w-4 text-text-muted-dark" />
+        <Terminal className="h-4 w-4 text-success" />
         <div>
           <p className="text-sm text-text-primary-dark">{session.type}</p>
           {session.user && (
-            <p className="text-xs text-text-muted-dark">User: {session.user}</p>
+            <p className="text-xs text-text-muted-dark">{session.user}</p>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Badge variant={statusColors[session.status]} className="text-xs">
-          {session.status}
-        </Badge>
-        <Badge variant="outline" className="text-xs">
-          {session.privilege}
-        </Badge>
-      </div>
+      <span className={cn(
+        'px-1.5 py-0.5 rounded text-[10px] font-medium',
+        session.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+      )}>
+        {session.privilege}
+      </span>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // RAGLOX v3.0 - Header Component
-// Professional header with clear borders and Emergency Stop button
+// Transparent, minimal header with blur effect
+// Inspired by Manus.im / Modern Agentic Design
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
@@ -10,6 +11,7 @@ import {
   Bell,
   Wifi,
   WifiOff,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -22,13 +24,15 @@ export function Header() {
   const isAIPanelOpen = useEventStore((state) => state.isAIPanelOpen)
   const isSidebarCollapsed = useEventStore((state) => state.isSidebarCollapsed)
   const [isStopModalOpen, setIsStopModalOpen] = React.useState(false)
+  const [confirmText, setConfirmText] = React.useState('')
   
   const handleEmergencyStop = async () => {
-    // In production, this would call the API to stop all missions
+    if (confirmText !== 'ABORT') return
+    
     console.log('Emergency stop triggered')
     setIsStopModalOpen(false)
+    setConfirmText('')
     
-    // Call API to stop mission
     try {
       const response = await fetch('/api/missions/stop', {
         method: 'POST',
@@ -43,35 +47,30 @@ export function Header() {
   }
   
   return (
-    <header className="fixed top-0 right-0 left-0 z-30 h-16 border-b-2 border-border-dark bg-bg-card-dark/95 backdrop-blur-md shadow-lg">
-      <div className={cn(
-        "flex h-full items-center justify-between px-6 transition-all duration-300",
-        isSidebarCollapsed ? "ml-16" : "ml-64"
-      )}>
-        {/* Left Section - Breadcrumb / Title */}
+    <header className={cn(
+      "fixed top-0 right-0 z-30 h-14",
+      "glass border-b border-white/5",
+      "transition-all duration-300",
+      isSidebarCollapsed ? "left-[72px]" : "left-56"
+    )}>
+      <div className="flex h-full items-center justify-between px-6">
+        {/* Left Section - Connection Status */}
         <div className="flex items-center gap-4">
-          <div className="flex flex-col">
-            <h1 className="text-lg font-semibold text-text-primary-dark tracking-tight">
-              Security Operations
-            </h1>
-            <span className="text-xs text-text-muted-dark font-mono">RAGLOX Control Center</span>
-          </div>
-          <div className="h-8 w-px bg-border-dark/50 mx-2" />
           <ConnectionIndicator status={connectionStatus} />
         </div>
         
         {/* Right Section - Actions */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           {/* Notifications */}
           <Button
             variant="ghost"
             size="icon"
-            className="relative rounded-xl border-2 border-transparent hover:border-border-dark/50"
+            className="relative rounded-xl hover:bg-white/5"
             onClick={() => {}}
           >
-            <Bell className="h-5 w-5 text-text-secondary-dark" />
+            <Bell className="h-4 w-4 text-text-secondary-dark" />
             {pendingApprovals.length > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-critical text-xs font-bold text-white shadow-lg">
+              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-critical text-[10px] font-bold text-white">
                 {pendingApprovals.length}
               </span>
             )}
@@ -83,55 +82,87 @@ export function Header() {
             size="icon"
             onClick={toggleAIPanel}
             title="AI Assistant"
-            className="rounded-xl border-2 border-transparent hover:border-border-dark/50"
+            className={cn(
+              'rounded-xl',
+              isAIPanelOpen ? 'bg-royal-blue/10 text-royal-blue' : 'hover:bg-white/5'
+            )}
           >
-            <Bot className="h-5 w-5 text-text-secondary-dark" />
+            <Bot className="h-4 w-4" />
           </Button>
-          
-          {/* Divider */}
-          <div className="h-8 w-px bg-border-dark/50" />
           
           {/* Emergency Stop Button */}
           <Button
-            variant="outline"
-            className="border-2 border-critical text-critical hover:bg-critical hover:text-white transition-all duration-200 gap-2 px-4 rounded-xl font-bold shadow-lg shadow-critical/10"
+            variant="ghost"
+            className={cn(
+              'ml-2 gap-2 px-3 py-1.5 rounded-xl text-xs font-medium',
+              'text-critical/80 hover:text-critical hover:bg-critical/10',
+              'transition-all duration-200'
+            )}
             onClick={() => setIsStopModalOpen(true)}
           >
-            <OctagonX className="h-4 w-4" />
-            <span>EMERGENCY STOP</span>
+            <OctagonX className="h-3.5 w-3.5" />
+            <span>STOP</span>
           </Button>
         </div>
       </div>
       
-      {/* Emergency Stop Confirmation Modal */}
+      {/* Emergency Stop Confirmation Modal - Enhanced with ABORT typing */}
       {isStopModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border-2 border-critical/30 bg-bg-card-dark p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl glass border border-white/10 p-6 shadow-2xl animate-fade-in">
             <div className="flex items-center gap-4 text-critical mb-6">
-              <div className="p-3 rounded-xl bg-critical/10 border-2 border-critical/30">
-                <OctagonX className="h-8 w-8" />
+              <div className="p-3 rounded-2xl bg-critical/10">
+                <AlertTriangle className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-xl font-bold">Emergency Stop</h2>
-                <p className="text-sm text-text-muted-dark">This action cannot be undone</p>
+                <h2 className="text-lg font-semibold text-text-primary-dark">Emergency Stop</h2>
+                <p className="text-sm text-text-muted-dark">This action requires confirmation</p>
               </div>
             </div>
-            <p className="text-text-secondary-dark mb-6 leading-relaxed">
-              This will immediately halt all running missions and active operations.
-              Are you sure you want to proceed?
+            
+            <p className="text-sm text-text-secondary-dark mb-4 leading-relaxed">
+              This will immediately halt all running missions and active operations. 
+              This may leave systems in an inconsistent state.
             </p>
+            
+            <div className="mb-6">
+              <label className="block text-xs font-medium text-text-muted-dark mb-2">
+                Type <span className="text-critical font-mono">ABORT</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+                placeholder="Type ABORT"
+                className={cn(
+                  'w-full px-4 py-2.5 rounded-xl text-sm font-mono',
+                  'bg-bg-elevated-dark/50 border border-white/10',
+                  'text-text-primary-dark placeholder:text-text-muted-dark',
+                  'focus:outline-none focus:ring-2 focus:ring-critical/30'
+                )}
+                autoFocus
+              />
+            </div>
+            
             <div className="flex justify-end gap-3">
               <Button 
                 variant="ghost" 
-                onClick={() => setIsStopModalOpen(false)}
-                className="rounded-xl"
+                onClick={() => {
+                  setIsStopModalOpen(false)
+                  setConfirmText('')
+                }}
+                className="rounded-xl text-sm"
               >
                 Cancel
               </Button>
               <Button 
                 variant="destructive" 
                 onClick={handleEmergencyStop}
-                className="rounded-xl font-bold"
+                disabled={confirmText !== 'ABORT'}
+                className={cn(
+                  'rounded-xl text-sm font-medium',
+                  confirmText !== 'ABORT' && 'opacity-50 cursor-not-allowed'
+                )}
               >
                 Confirm Stop
               </Button>
@@ -143,7 +174,7 @@ export function Header() {
   )
 }
 
-// Connection Status Indicator
+// Connection Status Indicator - Minimal
 interface ConnectionIndicatorProps {
   status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 }
@@ -153,28 +184,24 @@ function ConnectionIndicator({ status }: ConnectionIndicatorProps) {
     connected: {
       icon: Wifi,
       color: 'text-success',
-      bgColor: 'bg-success/10 border-success/30',
       dotColor: 'bg-success',
       label: 'Connected',
     },
     connecting: {
       icon: Wifi,
       color: 'text-warning',
-      bgColor: 'bg-warning/10 border-warning/30',
       dotColor: 'bg-warning animate-pulse',
       label: 'Connecting...',
     },
     reconnecting: {
       icon: Wifi,
       color: 'text-warning',
-      bgColor: 'bg-warning/10 border-warning/30',
       dotColor: 'bg-warning animate-pulse',
       label: 'Reconnecting...',
     },
     disconnected: {
       icon: WifiOff,
       color: 'text-critical',
-      bgColor: 'bg-critical/10 border-critical/30',
       dotColor: 'bg-critical',
       label: 'Disconnected',
     },
@@ -184,14 +211,9 @@ function ConnectionIndicator({ status }: ConnectionIndicatorProps) {
   const Icon = config.icon
   
   return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border-2',
-        config.bgColor
-      )}
-    >
-      <span className={cn('w-2 h-2 rounded-full', config.dotColor)} />
-      <Icon className={cn('h-4 w-4', config.color)} />
+    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5">
+      <span className={cn('w-1.5 h-1.5 rounded-full', config.dotColor)} />
+      <Icon className={cn('h-3.5 w-3.5', config.color)} />
       <span className={cn('text-xs font-medium', config.color)}>{config.label}</span>
     </div>
   )
