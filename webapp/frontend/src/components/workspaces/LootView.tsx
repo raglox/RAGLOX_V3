@@ -21,7 +21,8 @@ import {
   Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useMissionStore, selectCredentials, selectArtifacts, selectActiveSessions } from '@/stores/missionStore'
+import { useMissionStore } from '@/stores/missionStore'
+import { useShallow } from 'zustand/shallow'
 import { CredentialVault } from '@/components/loot/CredentialVault'
 import { SessionManager } from '@/components/loot/SessionTerminal'
 // Types imported from stores
@@ -44,7 +45,9 @@ interface TabConfig {
 // ═══════════════════════════════════════════════════════════════
 
 function ArtifactsGallery() {
-  const artifacts = useMissionStore(selectArtifacts)
+  // Use useShallow to prevent infinite loops with Map.values()
+  const artifactsMap = useMissionStore(useShallow((state) => state.artifacts))
+  const artifacts = useMemo(() => Array.from(artifactsMap.values()), [artifactsMap])
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null)
   
   const getFileIcon = (type: string) => {
@@ -229,15 +232,34 @@ function ArtifactsGallery() {
 // ═══════════════════════════════════════════════════════════════
 
 function LootStats() {
-  const sessions = useMissionStore(selectActiveSessions)
-  const credentials = useMissionStore(selectCredentials)
-  const artifacts = useMissionStore(selectArtifacts)
-  
-  const verifiedCreds = credentials.filter(c => c.validation_status === 'verified')
-  const privilegedCreds = credentials.filter(c => 
-    ['root', 'admin', 'system'].includes(c.privilege_level.toLowerCase())
+  // Use useShallow to prevent infinite loops with Map.values()
+  const { sessionsMap, credentialsMap, artifactsMap } = useMissionStore(
+    useShallow((state) => ({
+      sessionsMap: state.activeSessions,
+      credentialsMap: state.credentials,
+      artifactsMap: state.artifacts,
+    }))
   )
-  const activeSessions = sessions.filter(s => s.status === 'active')
+  
+  // Convert Maps to arrays with useMemo for stability
+  const sessions = useMemo(() => Array.from(sessionsMap.values()), [sessionsMap])
+  const credentials = useMemo(() => Array.from(credentialsMap.values()), [credentialsMap])
+  const artifacts = useMemo(() => Array.from(artifactsMap.values()), [artifactsMap])
+  
+  const verifiedCreds = useMemo(() => 
+    credentials.filter(c => c.validation_status === 'verified'),
+    [credentials]
+  )
+  const privilegedCreds = useMemo(() => 
+    credentials.filter(c => 
+      ['root', 'admin', 'system'].includes(c.privilege_level.toLowerCase())
+    ),
+    [credentials]
+  )
+  const activeSessions = useMemo(() => 
+    sessions.filter(s => s.status === 'active'),
+    [sessions]
+  )
   
   return (
     <div className="grid grid-cols-5 gap-3 mb-6">
@@ -298,9 +320,19 @@ export interface LootViewProps {
 }
 
 export function LootView({ onKillSession, onExecuteCommand, onTestCredential }: LootViewProps) {
-  const sessions = useMissionStore(selectActiveSessions)
-  const credentials = useMissionStore(selectCredentials)
-  const artifacts = useMissionStore(selectArtifacts)
+  // Use useShallow to prevent infinite loops with Map.values()
+  const { sessionsMap, credentialsMap, artifactsMap } = useMissionStore(
+    useShallow((state) => ({
+      sessionsMap: state.activeSessions,
+      credentialsMap: state.credentials,
+      artifactsMap: state.artifacts,
+    }))
+  )
+  
+  // Convert Maps to arrays with useMemo for stability
+  const sessions = useMemo(() => Array.from(sessionsMap.values()), [sessionsMap])
+  const credentials = useMemo(() => Array.from(credentialsMap.values()), [credentialsMap])
+  const artifacts = useMemo(() => Array.from(artifactsMap.values()), [artifactsMap])
   
   const [activeTab, setActiveTab] = useState<LootTab>('sessions')
   

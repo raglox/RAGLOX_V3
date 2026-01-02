@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import {
   Target,
   Activity,
@@ -195,19 +196,35 @@ interface NavLinkProps {
 
 function NavLink({ item, isExpanded, onClick }: NavLinkProps) {
   const Icon = item.icon
-  const isActive = window.location.pathname === item.href
+  const location = useLocation()
+  const isActive = location.pathname === item.href
   
-  const handleClick = (e: React.MouseEvent) => {
-    if (onClick) {
-      e.preventDefault()
-      onClick()
-    }
+  // For special actions like AI toggle
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className={cn(
+          'w-full relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium',
+          'transition-all duration-200 group',
+          'text-text-secondary-dark hover:text-text-primary-dark hover:bg-white/5'
+        )}
+        title={!isExpanded ? item.label : undefined}
+      >
+        <Icon className="h-5 w-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+        <span className={cn(
+          'whitespace-nowrap transition-all duration-300 overflow-hidden',
+          isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0'
+        )}>
+          {item.label}
+        </span>
+      </button>
+    )
   }
   
   return (
-    <a
-      href={item.href}
-      onClick={handleClick}
+    <Link
+      to={item.href}
       className={cn(
         'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium',
         'transition-all duration-200 group',
@@ -270,6 +287,6 @@ function NavLink({ item, isExpanded, onClick }: NavLinkProps) {
           isExpanded ? 'opacity-100' : 'opacity-0'
         )} />
       )}
-    </a>
+    </Link>
   )
 }

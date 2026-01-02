@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState } from 'react'
+import { useShallow } from 'zustand/shallow'
 import {
   Activity,
   Shield,
@@ -173,8 +174,10 @@ function DecisionRoom({ approval, onOpenModal }: DecisionRoomProps) {
 // ═══════════════════════════════════════════════════════════════
 
 function QuickStats() {
-  const { timeline, missionPhase } = useMissionStore()
-  const missionStats = useEventStore(s => s.missionStats)
+  const { timeline, missionPhase } = useMissionStore(
+    useShallow((s) => ({ timeline: s.timeline, missionPhase: s.missionPhase }))
+  )
+  const missionStats = useEventStore((s) => s.missionStats)
   
   const phaseEvents = timeline.filter(e => e.phase === missionPhase)
   const completedEvents = phaseEvents.filter(e => e.status === 'completed')
@@ -235,8 +238,10 @@ export interface OperationsViewProps {
 }
 
 export function OperationsView({ onApprove: _onApprove, onReject: _onReject }: OperationsViewProps) {
-  const { systemStatus, currentApproval } = useMissionStore()
-  const pendingApprovals = useEventStore(s => s.pendingApprovals)
+  const { systemStatus, currentApproval } = useMissionStore(
+    useShallow((s) => ({ systemStatus: s.systemStatus, currentApproval: s.currentApproval }))
+  )
+  const pendingApprovals = useEventStore((s) => s.pendingApprovals)
   
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null)

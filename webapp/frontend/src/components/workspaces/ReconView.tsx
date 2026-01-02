@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, useMemo } from 'react'
+import { useShallow } from 'zustand/shallow'
 import {
   Target,
   Filter,
@@ -395,8 +396,17 @@ export interface ReconViewProps {
 }
 
 export function ReconView({ onRefresh, onExport }: ReconViewProps) {
-  const targets = useEventStore(s => Array.from(s.targets.values()))
-  const vulnerabilities = useEventStore(s => s.vulnerabilities)
+  // Get store state with shallow comparison to prevent infinite loops
+  const { targetsMap, vulnsMap } = useEventStore(
+    useShallow((state) => ({
+      targetsMap: state.targets,
+      vulnsMap: state.vulnerabilities,
+    }))
+  )
+  
+  // Convert Maps to arrays in useMemo
+  const targets = useMemo(() => Array.from(targetsMap.values()), [targetsMap])
+  const vulnerabilities = vulnsMap
   
   const [searchTerm, setSearchTerm] = useState('')
   const [groupBy, setGroupBy] = useState<GroupByOption>('none')
