@@ -18,7 +18,7 @@ import asyncio
 import os
 import sys
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from pathlib import Path
 from uuid import uuid4
@@ -225,9 +225,9 @@ class AttackSimulator:
                 "technique_id": "T1110.001",
             },
             "execution_logs": [
-                {"timestamp": datetime.utcnow().isoformat(), "level": "INFO", "message": "Starting SSH bruteforce attack"},
-                {"timestamp": datetime.utcnow().isoformat(), "level": "INFO", "message": "Attempting authentication with user 'admin'"},
-                {"timestamp": datetime.utcnow().isoformat(), "level": "ERROR", "message": "Connection blocked by EDR"},
+                {"timestamp": datetime.now(timezone.utc).isoformat(), "level": "INFO", "message": "Starting SSH bruteforce attack"},
+                {"timestamp": datetime.now(timezone.utc).isoformat(), "level": "INFO", "message": "Attempting authentication with user 'admin'"},
+                {"timestamp": datetime.now(timezone.utc).isoformat(), "level": "ERROR", "message": "Connection blocked by EDR"},
             ]
         }
     
@@ -349,12 +349,12 @@ Respond with JSON only:
         ]
         
         # Make the API call
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         print_ai("Sending request to AI...")
         
         response = await provider.generate_json(messages)
         
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         latency = (end_time - start_time).total_seconds() * 1000
         
         # Get cost stats

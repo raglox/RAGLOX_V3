@@ -30,7 +30,7 @@ class TestEnums:
     
     def test_mission_status_values(self):
         """Test MissionStatus enum has all required values."""
-        expected = {'created', 'starting', 'running', 'paused', 
+        expected = {'created', 'starting', 'running', 'paused', 'waiting_for_approval',
                    'completing', 'completed', 'failed', 'cancelled', 'archived'}
         actual = {status.value for status in MissionStatus}
         assert actual == expected, f"Missing statuses: {expected - actual}"
@@ -63,6 +63,7 @@ class TestEnums:
     def test_task_type_values(self):
         """Test TaskType enum covers all specialist operations."""
         expected = {'network_scan', 'port_scan', 'service_enum', 'vuln_scan',
+                   'osint_lookup',  # Intel specialist OSINT lookup
                    'exploit', 'privesc', 'lateral', 'cred_harvest',
                    'persistence', 'evasion', 'cleanup'}
         actual = {t.value for t in TaskType}
@@ -70,8 +71,8 @@ class TestEnums:
     
     def test_specialist_type_values(self):
         """Test SpecialistType enum."""
-        expected = {'recon', 'vuln', 'attack', 'cred', 'persistence',
-                   'evasion', 'cleanup', 'analysis'}
+        expected = {'recon', 'vuln', 'attack', 'cred', 'intel',  # Intel specialist
+                   'persistence', 'evasion', 'cleanup', 'analysis'}
         actual = {s.value for s in SpecialistType}
         assert actual == expected
 
