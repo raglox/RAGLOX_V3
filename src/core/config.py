@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, description="API port")
     api_reload: bool = Field(default=False, description="Auto-reload on changes")
     cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="*",
         description="Comma-separated list of allowed CORS origins"
     )
     
