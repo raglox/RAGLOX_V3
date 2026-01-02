@@ -109,6 +109,7 @@ class TaskType(str, Enum):
     PORT_SCAN = "port_scan"
     SERVICE_ENUM = "service_enum"
     VULN_SCAN = "vuln_scan"
+    OSINT_LOOKUP = "osint_lookup"  # Intel: Search for leaked credentials
     EXPLOIT = "exploit"
     PRIVESC = "privesc"
     LATERAL = "lateral"
@@ -124,6 +125,7 @@ class SpecialistType(str, Enum):
     VULN = "vuln"
     ATTACK = "attack"
     CRED = "cred"
+    INTEL = "intel"  # Intel: OSINT and leaked data specialist
     PERSISTENCE = "persistence"
     EVASION = "evasion"
     CLEANUP = "cleanup"
@@ -303,7 +305,13 @@ class Vulnerability(BaseEntity):
 # ═══════════════════════════════════════════════════════════════
 
 class Credential(BaseEntity):
-    """Credential entity."""
+    """
+    Credential entity.
+    
+    Includes Intel integration for reliability scoring:
+    - reliability_score: 0.0-1.0 (1.0 = verified brute force, 0.8 = recent leak, lower for older data)
+    - source_metadata: Additional context about credential origin (intel source, raw log hash, etc.)
+    """
     mission_id: UUID
     target_id: UUID
     
@@ -314,13 +322,27 @@ class Credential(BaseEntity):
     value_encrypted: Optional[bytes] = None  # Encrypted credential value
     
     # Discovery
-    source: Optional[str] = None  # How it was obtained (mimikatz, brute_force, etc.)
+    source: Optional[str] = None  # How it was obtained (mimikatz, brute_force, intel:arthouse, etc.)
     discovered_by: Optional[str] = None
     discovered_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Verification
     verified: bool = False
     privilege_level: PrivilegeLevel = PrivilegeLevel.UNKNOWN
+    
+    # Intel Integration - Reliability scoring
+    reliability_score: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Credential reliability score: 1.0=verified/brute_force, 0.8=recent_leak, 0.5=old_leak"
+    )
+    
+    # Source metadata for Intel credentials
+    source_metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional source context: intel_source, source_name, source_date, raw_log_hash, etc."
+    )
 
 
 # ═══════════════════════════════════════════════════════════════

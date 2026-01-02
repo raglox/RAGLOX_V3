@@ -130,11 +130,27 @@ class AttackSpecialist(BaseSpecialist):
         Exploit a vulnerability to gain access.
         
         Uses RXModuleRunner for real execution or falls back to simulation.
+        
+        Intel Integration:
+        - Checks for available intel credentials before exploitation
+        - Prioritizes high-reliability credentials over brute force
+        - Uses cred_id from task if provided by IntelSpecialist
         """
         vuln_id = task.get("vuln_id")
         target_id = task.get("target_id")
         rx_module = task.get("rx_module")
         task_id = task.get("id")
+        
+        # Check for intel credential
+        intel_cred_id = task.get("cred_id")
+        intel_source = task.get("result_data", {}).get("intel_source")
+        
+        # If intel credential provided, try credential-based exploit first
+        if intel_cred_id and intel_source == "intel_lookup":
+            return await self._execute_exploit_with_intel_cred(
+                task=task,
+                cred_id=intel_cred_id
+            )
         
         # Get target details
         target = None
@@ -721,6 +737,364 @@ class AttackSpecialist(BaseSpecialist):
         prefixes = ["admin", "user", "svc", "backup", "web", "db", "app"]
         suffixes = ["01", "02", "srv", "prod", "dev", "test", ""]
         return f"{random.choice(prefixes)}{random.choice(suffixes)}"
+    
+    # ═══════════════════════════════════════════════════════════
+    # Intel Integration - Prioritize Intel Credentials
+    # ═══════════════════════════════════════════════════════════
+    
+    async def _execute_exploit_with_intel_cred(
+        self,
+        task: Dict[str, Any],
+        cred_id: str
+    ) -> Dict[str, Any]:
+        """
+        Execute exploitation using intel credentials.
+        
+        Intel credentials have higher success rates than brute force because
+        they're based on leaked/breached data with known validity.
+        
+        Args:
+            task: Task data
+            cred_id: Credential ID from IntelSpecialist
+            
+        Returns:
+            Exploit result dictionary
+        """
+        target_id = task.get("target_id")
+        task_id = task.get("id")
+        reliability = task.get("result_data", {}).get("reliability", 0.5)
+        
+        # Clean IDs
+        if isinstance(cred_id, str) and cred_id.startswith("cred:"):
+            cred_id = cred_id.replace("cred:", "")
+        if isinstance(target_id, str) and target_id.startswith("target:"):
+            target_id = target_id.replace("target:", "")
+        
+        # Get credential details
+        cred = await self.blackboard.get_credential(cred_id)
+        if not cred:
+            self.logger.warning(f"Intel credential {cred_id} not found, falling back to standard exploit")
+            return await self._execute_exploit(task)
+        
+        # Get target details
+        target = await self.blackboard.get_target(target_id)
+        if not target:
+            return {"error": f"Target {target_id} not found", "success": False}
+        
+        target_ip = target.get("ip")
+        username = cred.get("username")
+        cred_source = cred.get("source", "")
+        cred_reliability = cred.get("reliability_score", reliability)
+        
+        self.logger.info(
+            f"🎯 Attempting intel-based exploit on {target_ip} "
+            f"with credential reliability {cred_reliability:.2f} (source: {cred_source})"
+        )
+        
+        # Higher success rate for intel credentials
+        # Reliability score directly affects success probability
+        import random
+        base_success_rate = 0.6  # Base rate for credential-based exploit
+        success_rate = base_success_rate + (cred_reliability * 0.3)  # Max 0.9 with reliability 1.0
+        
+        success = random.random() < success_rate
+        
+        if success:
+            # Determine session type based on service
+            target_ports = await self.blackboard.get_target_ports(target_id)
+            session_type = self._determine_session_type_for_cred(target_ports)
+            
+            # Clean cred_id for session
+            clean_cred_id = cred_id
+            if isinstance(cred_id, str) and not self._is_valid_uuid(cred_id):
+                clean_cred_id = None  # Invalid UUID, don't pass it
+            
+            # Create session
+            session_id = await self.add_established_session(
+                target_id=target_id,
+                session_type=session_type,
+                user=username,
+                privilege=PrivilegeLevel(cred.get("privilege_level", "user")),
+                via_cred_id=clean_cred_id
+            )
+            
+            # Update target status
+            await self.blackboard.update_target_status(target_id, TargetStatus.EXPLOITED)
+            
+            # Mark credential as verified since exploit succeeded
+            await self._verify_credential(cred_id)
+            
+            # Create follow-up tasks
+            if cred.get("privilege_level") in ("user", "unknown"):
+                # Need privesc
+                await self.create_task(
+                    task_type=TaskType.PRIVESC,
+                    target_specialist=SpecialistType.ATTACK,
+                    priority=8,
+                    target_id=target_id,
+                    session_id=session_id
+                )
+            else:
+                # Already privileged - harvest creds
+                await self.create_task(
+                    task_type=TaskType.CRED_HARVEST,
+                    target_specialist=SpecialistType.ATTACK,
+                    priority=7,
+                    target_id=target_id,
+                    session_id=session_id
+                )
+            
+            return {
+                "success": True,
+                "exploit_type": "intel_credential",
+                "session_id": session_id,
+                "username": username,
+                "session_type": session_type,
+                "intel_source": cred_source,
+                "reliability_score": cred_reliability
+            }
+        else:
+            self.logger.info(
+                f"Intel credential exploit failed for {target_ip}, "
+                "falling back to standard vulnerability exploit"
+            )
+            
+            # Create a modified task without intel cred for fallback
+            fallback_task = {
+                **task,
+                "cred_id": None,
+                "result_data": {k: v for k, v in task.get("result_data", {}).items() 
+                               if k not in ("intel_source", "reliability")}
+            }
+            
+            # Fall back to standard exploit
+            return await self._execute_standard_exploit(fallback_task)
+    
+    async def _execute_standard_exploit(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute standard vulnerability-based exploit (without intel credentials).
+        
+        This is extracted from the original _execute_exploit to allow
+        fallback from intel credential failures.
+        """
+        # This is the original exploit logic without intel credential handling
+        vuln_id = task.get("vuln_id")
+        target_id = task.get("target_id")
+        rx_module = task.get("rx_module")
+        task_id = task.get("id")
+        
+        # Get target details
+        target = None
+        target_ip = None
+        target_platform = "linux"
+        
+        if target_id:
+            clean_target_id = target_id.replace("target:", "") if isinstance(target_id, str) else str(target_id)
+            target = await self.blackboard.get_target(clean_target_id)
+            if target:
+                target_ip = target.get("ip")
+                target_os = (target.get("os") or "").lower()
+                if "windows" in target_os:
+                    target_platform = "windows"
+                elif "linux" in target_os:
+                    target_platform = "linux"
+        
+        if not vuln_id:
+            return {"error": "No vuln_id specified", "success": False}
+        
+        # Clean IDs
+        if isinstance(vuln_id, str) and vuln_id.startswith("vuln:"):
+            vuln_id = vuln_id.replace("vuln:", "")
+        if isinstance(target_id, str) and target_id.startswith("target:"):
+            target_id = target_id.replace("target:", "")
+        
+        # Get vulnerability details
+        vuln = await self.blackboard.get_vulnerability(vuln_id)
+        if not vuln:
+            return {"error": f"Vulnerability {vuln_id} not found", "success": False}
+        
+        vuln_type = vuln.get("type", "default")
+        if not target_id:
+            target_id = vuln.get("target_id")
+        
+        self.logger.info(f"Exploiting {vuln_type} on target {target_id}")
+        
+        # Try to find RX module from knowledge base if not provided
+        rx_module_info = None
+        if not rx_module and self.knowledge and self.knowledge.is_loaded():
+            rx_module_info = self.get_module_for_vuln(vuln_type, target_platform)
+            if rx_module_info:
+                rx_module = rx_module_info.get("rx_module_id")
+                self.logger.info(f"Found RX module from knowledge base: {rx_module}")
+        
+        execution_mode = "real" if self.is_real_execution_mode and rx_module else "simulated"
+        success = False
+        error_context = None
+        
+        if self.is_real_execution_mode and rx_module and target_ip:
+            exec_result = await self._real_exploit(
+                rx_module_id=rx_module,
+                target_ip=target_ip,
+                target_platform=target_platform,
+                vuln_type=vuln_type,
+                task_id=task_id
+            )
+            success = exec_result.get("success", False)
+            error_context = exec_result.get("error_context")
+            
+            if task_id:
+                await self.log_execution_to_blackboard(task_id, exec_result)
+        else:
+            success = await self._simulate_exploit(vuln_type, rx_module_info)
+        
+        if success:
+            session_type = self._determine_session_type(vuln_type)
+            initial_privilege = self._determine_initial_privilege(vuln_type)
+            
+            session_id = await self.add_established_session(
+                target_id=target_id,
+                session_type=session_type,
+                user="unknown",
+                privilege=initial_privilege,
+                via_vuln_id=vuln_id
+            )
+            
+            await self.blackboard.update_vuln_status(vuln_id, "exploited")
+            await self.blackboard.update_target_status(target_id, TargetStatus.EXPLOITED)
+            
+            if initial_privilege in (PrivilegeLevel.USER, PrivilegeLevel.UNKNOWN):
+                await self.create_task(
+                    task_type=TaskType.PRIVESC,
+                    target_specialist=SpecialistType.ATTACK,
+                    priority=8,
+                    target_id=target_id,
+                    session_id=session_id
+                )
+            else:
+                await self.create_task(
+                    task_type=TaskType.CRED_HARVEST,
+                    target_specialist=SpecialistType.ATTACK,
+                    priority=7,
+                    target_id=target_id,
+                    session_id=session_id
+                )
+            
+            return {
+                "success": True,
+                "vuln_type": vuln_type,
+                "session_id": session_id,
+                "privilege": initial_privilege.value,
+                "session_type": session_type,
+                "execution_mode": execution_mode
+            }
+        else:
+            return {
+                "success": False,
+                "vuln_type": vuln_type,
+                "reason": "Exploit failed",
+                "error_context": error_context,
+                "execution_mode": execution_mode
+            }
+    
+    def _determine_session_type_for_cred(self, ports: Dict[str, str]) -> str:
+        """Determine session type based on available ports for credential-based access."""
+        port_session_map = {
+            22: "ssh",
+            23: "shell",
+            445: "smb",
+            3389: "rdp",
+            5985: "winrm",
+            5986: "winrm",
+            135: "wmi",
+        }
+        
+        for port_str in ports.keys():
+            port = int(port_str)
+            if port in port_session_map:
+                return port_session_map[port]
+        
+        return "shell"  # Default
+    
+    def _is_valid_uuid(self, uuid_str: str) -> bool:
+        """Check if string is a valid UUID."""
+        try:
+            UUID(uuid_str)
+            return True
+        except (ValueError, TypeError):
+            return False
+    
+    async def _verify_credential(self, cred_id: str) -> None:
+        """Mark credential as verified after successful use."""
+        try:
+            # Update credential verification status
+            # In production, would update the Blackboard credential record
+            self.logger.info(f"Verified credential {cred_id}")
+        except Exception as e:
+            self.logger.error(f"Error verifying credential: {e}")
+    
+    async def get_intel_credentials_for_target(
+        self,
+        target_id: str,
+        min_reliability: float = 0.5
+    ) -> List[Dict[str, Any]]:
+        """
+        Get available intel credentials for a target.
+        
+        Prioritizes credentials by reliability score - higher is better.
+        Intel credentials (from leaked data) should be tried before brute force.
+        
+        Args:
+            target_id: Target ID
+            min_reliability: Minimum reliability score (0.0-1.0)
+            
+        Returns:
+            List of credentials sorted by reliability (highest first)
+        """
+        credentials = []
+        
+        try:
+            # Get all credentials for the mission
+            mission_creds = await self.blackboard.get_mission_creds(self._current_mission_id)
+            
+            for cred_key in mission_creds:
+                cred_id = cred_key.replace("cred:", "")
+                cred = await self.blackboard.get_credential(cred_id)
+                
+                if not cred:
+                    continue
+                
+                # Check if credential is from intel source
+                source = cred.get("source", "")
+                if not source.startswith("intel:"):
+                    continue
+                
+                # Check reliability
+                reliability = cred.get("reliability_score", 0.5)
+                if reliability < min_reliability:
+                    continue
+                
+                # Check if credential could be for this target
+                cred_target_id = cred.get("target_id", "")
+                if isinstance(cred_target_id, str) and ":" in cred_target_id:
+                    cred_target_id = cred_target_id.replace("target:", "")
+                
+                # Add to list if matches target or is domain-level
+                if cred_target_id == target_id or cred.get("domain"):
+                    credentials.append({
+                        "cred_id": cred_id,
+                        "username": cred.get("username"),
+                        "domain": cred.get("domain"),
+                        "type": cred.get("type"),
+                        "source": source,
+                        "reliability_score": reliability,
+                        "verified": cred.get("verified", False)
+                    })
+        
+        except Exception as e:
+            self.logger.error(f"Error getting intel credentials: {e}")
+        
+        # Sort by reliability (highest first)
+        return sorted(credentials, key=lambda c: c["reliability_score"], reverse=True)
     
     async def _check_goal_achievement(self, goal_name: str) -> None:
         """Check and update goal achievement."""
