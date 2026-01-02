@@ -27,7 +27,10 @@ export function Header() {
   const [confirmText, setConfirmText] = React.useState('')
   
   const handleEmergencyStop = async () => {
-    if (confirmText !== 'ABORT') return
+    if (confirmText !== 'ABORT') {
+      // Visual feedback - the input will show error state
+      return
+    }
     
     console.log('Emergency stop triggered')
     setIsStopModalOpen(false)

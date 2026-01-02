@@ -32,6 +32,16 @@ const osIcons: Record<string, React.ElementType> = {
   unknown: Server,
 }
 
+// OS detection helper function
+function detectOsType(os: string | undefined): string {
+  if (!os) return 'unknown'
+  const osLower = os.toLowerCase()
+  if (/win|windows|win10|win11|win7/i.test(osLower)) return 'windows'
+  if (/linux|ubuntu|debian|centos|redhat|fedora|arch/i.test(osLower)) return 'linux'
+  if (/mac|darwin|macos|osx/i.test(osLower)) return 'macos'
+  return 'unknown'
+}
+
 export function TargetDetailsDrawer() {
   const selectedTargetId = useEventStore((state) => state.selectedTargetId)
   const targets = useEventStore((state) => state.targets)
@@ -87,11 +97,8 @@ export function TargetDetailsDrawer() {
   
   if (!selectedTarget) return null
   
-  // Determine OS icon
-  const osType = selectedTarget.os?.toLowerCase().includes('windows') ? 'windows'
-    : selectedTarget.os?.toLowerCase().includes('linux') ? 'linux'
-    : selectedTarget.os?.toLowerCase().includes('mac') ? 'macos'
-    : 'unknown'
+  // Determine OS icon using helper function
+  const osType = detectOsType(selectedTarget.os)
   const OsIcon = osIcons[osType]
   
   const isCompromised = selectedTarget.status === 'exploited' || selectedTarget.status === 'owned'
