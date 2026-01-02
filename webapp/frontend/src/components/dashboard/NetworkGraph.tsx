@@ -4,11 +4,11 @@
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
-import ForceGraph2D, { type ForceGraphMethods, type NodeObject, type LinkObject } from 'react-force-graph-2d'
+import ForceGraph2D from 'react-force-graph-2d'
 import { Network } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { useEventStore, selectTargets } from '@/stores/eventStore'
+import { useEventStore } from '@/stores/eventStore'
 import type { GraphNode, GraphLink } from '@/types'
 
 // Node colors based on status
@@ -33,16 +33,29 @@ const priorityColors: Record<string, string> = {
 
 export function NetworkGraph() {
   const containerRef = React.useRef<HTMLDivElement>(null)
-  const graphRef = React.useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined)
   const [dimensions, setDimensions] = React.useState({ width: 600, height: 400 })
   
-  const { graphData, updateGraphData, setSelectedTarget } = useEventStore()
-  const targets = useEventStore(selectTargets)
+  // Get state with stable selectors - use shallow comparison for objects
+  const graphData = useEventStore((state) => state.graphData)
+  const targetCount = useEventStore((state) => state.targets.size)
+  const updateGraphData = useEventStore((state) => state.updateGraphData)
+  const setSelectedTarget = useEventStore((state) => state.setSelectedTarget)
+  
+  // Local copy of graph data to avoid issues with react-force-graph
+  const [localGraphData, setLocalGraphData] = React.useState<{ nodes: GraphNode[], links: GraphLink[] }>({ nodes: [], links: [] })
+  
+  // Update local graph data when store changes
+  React.useEffect(() => {
+    setLocalGraphData({
+      nodes: [...graphData.nodes],
+      links: [...graphData.links],
+    })
+  }, [graphData.nodes, graphData.links])
   
   // Update graph data when targets change
   React.useEffect(() => {
     updateGraphData()
-  }, [targets.length, updateGraphData])
+  }, [targetCount, updateGraphData])
   
   // Handle container resize
   React.useEffect(() => {
@@ -60,9 +73,9 @@ export function NetworkGraph() {
   
   // Node click handler
   const handleNodeClick = React.useCallback(
-    (node: NodeObject<GraphNode>) => {
-      if (node.type === 'target') {
-        setSelectedTarget(node.id as string)
+    (node: { id?: string | number; type?: string }) => {
+      if (node.type === 'target' && node.id) {
+        setSelectedTarget(String(node.id))
       }
     },
     [setSelectedTarget]
@@ -71,7 +84,7 @@ export function NetworkGraph() {
   // Custom node rendering
   const nodeCanvasObject = React.useCallback(
     (
-      node: NodeObject<GraphNode>,
+      node: { x?: number; y?: number; name?: string; type?: string; status?: string; priority?: string; childCount?: number },
       ctx: CanvasRenderingContext2D,
       globalScale: number
     ) => {
@@ -114,9 +127,8 @@ export function NetworkGraph() {
   )
   
   // Link rendering
-  const linkColor = React.useCallback((link: LinkObject<GraphNode, GraphLink>) => {
-    const linkData = link as GraphLink
-    switch (linkData.type) {
+  const linkColor = React.useCallback((link: { type?: string }) => {
+    switch (link.type) {
       case 'attack_path':
         return '#EF4444'
       case 'lateral':
@@ -133,10 +145,10 @@ export function NetworkGraph() {
           <CardTitle className="text-base">Network Map</CardTitle>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs">
-              {graphData.nodes.length} nodes
+              {localGraphData.nodes.length} nodes
             </Badge>
             <Badge variant="outline" className="text-xs">
-              {targets.length} targets
+              {targetCount} targets
             </Badge>
           </div>
         </div>
@@ -152,10 +164,9 @@ export function NetworkGraph() {
       </CardHeader>
       
       <CardContent className="p-0 h-[400px]" ref={containerRef}>
-        {graphData.nodes.length > 0 ? (
+        {localGraphData.nodes.length > 0 ? (
           <ForceGraph2D
-            ref={graphRef}
-            graphData={graphData}
+            graphData={localGraphData}
             width={dimensions.width}
             height={dimensions.height}
             backgroundColor="#0F172A"

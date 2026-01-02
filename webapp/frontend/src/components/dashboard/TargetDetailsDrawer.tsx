@@ -18,22 +18,36 @@ import { Drawer } from '@/components/ui/Drawer'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import { useEventStore, selectSelectedTarget, selectVulnerabilities, selectSessions } from '@/stores/eventStore'
+import { useEventStore } from '@/stores/eventStore'
 import type { Vulnerability, Session } from '@/types'
 
 export function TargetDetailsDrawer() {
-  const { selectedTargetId, setSelectedTarget, addToast } = useEventStore()
-  const selectedTarget = useEventStore(selectSelectedTarget)
-  const allVulnerabilities = useEventStore(selectVulnerabilities)
-  const allSessions = useEventStore(selectSessions)
+  // Get primitive values and functions directly, avoid selectors that create new arrays
+  const selectedTargetId = useEventStore((state) => state.selectedTargetId)
+  const targets = useEventStore((state) => state.targets)
+  const vulnerabilities = useEventStore((state) => state.vulnerabilities)
+  const sessions = useEventStore((state) => state.sessions)
+  const setSelectedTarget = useEventStore((state) => state.setSelectedTarget)
+  const addToast = useEventStore((state) => state.addToast)
   
-  // Filter vulnerabilities and sessions for this target
-  const targetVulns = allVulnerabilities.filter(
-    (v) => v.target_id === selectedTargetId
-  )
-  const targetSessions = allSessions.filter(
-    (s) => s.target_id === selectedTargetId
-  )
+  // Derive computed values using useMemo to avoid recalculation
+  const selectedTarget = React.useMemo(() => 
+    selectedTargetId ? targets.get(selectedTargetId) : null
+  , [selectedTargetId, targets])
+  
+  const targetVulns = React.useMemo(() => {
+    if (!selectedTargetId) return []
+    return Array.from(vulnerabilities.values()).filter(
+      (v) => v.target_id === selectedTargetId
+    )
+  }, [selectedTargetId, vulnerabilities])
+  
+  const targetSessions = React.useMemo(() => {
+    if (!selectedTargetId) return []
+    return Array.from(sessions.values()).filter(
+      (s) => s.target_id === selectedTargetId
+    )
+  }, [selectedTargetId, sessions])
   
   const handleClose = () => setSelectedTarget(null)
   
