@@ -70,12 +70,13 @@ function StatCard({ title, value, icon: Icon, trend, variant = 'default' }: Stat
 }
 
 export function StatsGrid() {
-  const { missionStats, sessions } = useEventStore()
+  const missionStats = useEventStore((state) => state.missionStats)
+  const sessions = useEventStore((state) => state.sessions)
   
-  // Calculate active tasks (sessions in this context)
-  const activeSessions = Array.from(sessions.values()).filter(
-    (s) => s.status === 'active'
-  ).length
+  // Calculate active tasks (sessions in this context) - memoize to avoid recalculation
+  const activeSessions = React.useMemo(() => 
+    Array.from(sessions.values()).filter((s) => s.status === 'active').length
+  , [sessions])
   
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
