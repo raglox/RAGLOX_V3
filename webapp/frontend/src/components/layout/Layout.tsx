@@ -29,12 +29,12 @@ export function Layout({ children }: LayoutProps) {
       {/* Main Content Area */}
       <main
         className={cn(
-          'pt-16 transition-all duration-300 ease-in-out',
+          'pt-20 transition-all duration-300 ease-in-out',
           isSidebarCollapsed ? 'ml-16' : 'ml-64',
-          isConsoleExpanded ? 'pb-64' : 'pb-10'
+          isConsoleExpanded ? 'pb-72' : 'pb-14'
         )}
       >
-        <div className="p-6">{children}</div>
+        <div className="px-6 py-4">{children}</div>
       </main>
       
       {/* Global Console */}
