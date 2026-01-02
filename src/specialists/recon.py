@@ -1,6 +1,7 @@
 # ═══════════════════════════════════════════════════════════════
 # RAGLOX v3.0 - Recon Specialist
 # Reconnaissance specialist for network and target discovery
+# With Nuclei Integration and AI-Driven Scanning
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -17,9 +18,13 @@ from ..core.models import (
 from ..core.blackboard import Blackboard
 from ..core.config import Settings
 from ..core.knowledge import EmbeddedKnowledge
+from ..core.scanners import NucleiScanner, NucleiScanResult
 
 if TYPE_CHECKING:
     from ..executors import RXModuleRunner, ExecutorFactory
+
+# Pre-compiled regex for parsing JSON from LLM responses
+_JSON_CODE_BLOCK_PATTERN = re.compile(r'```(?:json)?\s*([\s\S]*?)\s*```')
 
 
 class ReconSpecialist(BaseSpecialist):
@@ -119,6 +124,23 @@ class ReconSpecialist(BaseSpecialist):
             "rdp": [("CVE-2019-0708", "BlueKeep", Severity.CRITICAL)],
             "http": [("CVE-2021-44228", "Log4Shell", Severity.CRITICAL)],
         }
+        
+        # Nuclei scanner instance (lazy-loaded)
+        self._nuclei_scanner: Optional[NucleiScanner] = None
+        
+        # AI consultation settings (configurable via settings)
+        self._ai_consultation_enabled = True
+        # Threshold can be overridden via settings.nuclei_ai_consultation_threshold
+        self._ai_consultation_threshold = getattr(
+            self.settings, 'nuclei_ai_consultation_threshold', 10
+        )  # Consult LLM if more than N subdomains
+    
+    @property
+    def nuclei_scanner(self) -> NucleiScanner:
+        """Get or initialize the Nuclei scanner instance."""
+        if self._nuclei_scanner is None:
+            self._nuclei_scanner = NucleiScanner()
+        return self._nuclei_scanner
     
     # ═══════════════════════════════════════════════════════════
     # Task Execution
@@ -540,7 +562,11 @@ class ReconSpecialist(BaseSpecialist):
     
     async def _execute_vuln_scan(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute a vulnerability scan on a target.
+        Execute a vulnerability scan on a target using Nuclei.
+        
+        This method integrates the Nuclei scanner for comprehensive
+        vulnerability detection and optionally consults the LLM
+        for intelligent scan strategy decisions.
         """
         target_id = task.get("target_id")
         if not target_id:
@@ -553,17 +579,238 @@ class ReconSpecialist(BaseSpecialist):
         if not target:
             return {"error": f"Target {target_id} not found", "vulns_found": 0}
         
-        # Get existing vulnerabilities for this target
-        existing_vulns = await self.blackboard.get_mission_vulns(self._current_mission_id)
+        target_ip = target.get("ip")
+        target_ports = await self.blackboard.get_target_ports(target_id)
         
-        # In a real implementation, would run various vuln checks here
-        # For MVP, we've already added basic vulns in service enumeration
+        # Determine scan targets (for web services)
+        web_targets = []
+        for port_str, service in target_ports.items():
+            port = int(port_str)
+            if port in (80, 8080, 8000):
+                web_targets.append(f"http://{target_ip}:{port}")
+            elif port in (443, 8443):
+                web_targets.append(f"https://{target_ip}:{port}")
+        
+        # If no web targets, scan the IP directly
+        if not web_targets:
+            web_targets = [target_ip]
+        
+        # Consult LLM for scan strategy if enabled and many targets
+        scan_strategy = None
+        if self._ai_consultation_enabled and len(web_targets) > self._ai_consultation_threshold:
+            scan_strategy = await self._consult_llm_for_scan_strategy(
+                target_id=target_id,
+                targets=web_targets,
+                target_info=target
+            )
+        
+        # Apply AI-recommended strategy or use defaults
+        severity_filter = ["critical", "high"]
+        templates = None
+        
+        if scan_strategy:
+            severity_filter = scan_strategy.get("severity_filter", severity_filter)
+            templates = scan_strategy.get("templates")
+            focused_targets = scan_strategy.get("focused_targets")
+            if focused_targets:
+                web_targets = focused_targets
+        
+        # Execute Nuclei scan
+        vulns_found = []
+        nuclei_available = await self.nuclei_scanner.check_available()
+        
+        if nuclei_available:
+            self.logger.info(f"Running Nuclei scan on {len(web_targets)} target(s)")
+            
+            for web_target in web_targets:
+                result = await self.nuclei_scanner.scan(
+                    target=web_target,
+                    templates=templates,
+                    severity=severity_filter,
+                    include_request_response=True,
+                )
+                
+                if result.success:
+                    # Convert Nuclei findings to RAGLOX vulnerabilities
+                    for nuclei_vuln in result.vulnerabilities:
+                        raglox_vuln = nuclei_vuln.to_vulnerability(
+                            mission_id=UUID(self._current_mission_id),
+                            target_id=UUID(target_id)
+                        )
+                        vuln_id = await self.blackboard.add_vulnerability(raglox_vuln)
+                        
+                        # Get severity value safely (may be enum or string)
+                        severity_val = raglox_vuln.severity
+                        if hasattr(severity_val, 'value'):
+                            severity_val = severity_val.value
+                        
+                        vulns_found.append({
+                            "vuln_id": vuln_id,
+                            "type": raglox_vuln.type,
+                            "severity": severity_val,
+                            "name": raglox_vuln.name,
+                            "exploitable": nuclei_vuln.severity.value in ("critical", "high")
+                        })
+                        
+                        self.logger.info(
+                            f"Nuclei found {nuclei_vuln.severity.value} vuln: "
+                            f"{nuclei_vuln.name} ({nuclei_vuln.vuln_type or nuclei_vuln.template_id})"
+                        )
+                else:
+                    self.logger.warning(f"Nuclei scan failed: {result.error_message}")
+        else:
+            # Fall back to basic vulnerability checks
+            self.logger.warning("Nuclei not available, using basic vuln checks")
+            existing_vulns = await self.blackboard.get_mission_vulns(self._current_mission_id)
+            vulns_found = [{"vuln_id": v.replace("vuln:", ""), "type": "basic"} for v in existing_vulns]
+        
+        # Create exploit tasks for critical/high severity vulnerabilities
+        exploitable_vulns = [v for v in vulns_found if v.get("exploitable")]
+        for vuln in exploitable_vulns:
+            await self.create_task(
+                task_type=TaskType.EXPLOIT,
+                target_specialist=SpecialistType.ATTACK,
+                priority=9 if vuln.get("severity") == "critical" else 8,
+                target_id=target_id,
+                vuln_id=vuln.get("vuln_id")
+            )
         
         return {
             "target_id": target_id,
-            "vulns_found": len(existing_vulns),
-            "scan_type": "basic"
+            "vulns_found": len(vulns_found),
+            "critical_count": sum(1 for v in vulns_found if v.get("severity") == "critical"),
+            "high_count": sum(1 for v in vulns_found if v.get("severity") == "high"),
+            "exploitable_count": len(exploitable_vulns),
+            "vulnerabilities": vulns_found[:20],  # Limit response size
+            "scan_type": "nuclei" if nuclei_available else "basic",
+            "ai_strategy_used": scan_strategy is not None
         }
+    
+    async def _consult_llm_for_scan_strategy(
+        self,
+        target_id: str,
+        targets: List[str],
+        target_info: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Consult the LLM (via AnalysisSpecialist) for scan strategy.
+        
+        This implements the AI-driven decision making:
+        "Found 50 subdomains, should I scan all with Nuclei or focus on
+        targets containing 'admin'?"
+        
+        Args:
+            target_id: Target identifier
+            targets: List of target URLs/IPs to potentially scan
+            target_info: Target metadata
+            
+        Returns:
+            Scan strategy dict or None if LLM unavailable/disabled
+        """
+        try:
+            # Try to get LLM service
+            from ..core.llm.service import get_llm_service
+            
+            llm_service = get_llm_service()
+            if not llm_service or not llm_service.providers:
+                return None
+            
+            # Build consultation prompt
+            prompt = self._build_scan_strategy_prompt(targets, target_info)
+            
+            # Query LLM
+            from ..core.llm.models import CompletionRequest
+            
+            request = CompletionRequest(
+                prompt=prompt,
+                max_tokens=500,
+                temperature=0.3,
+            )
+            
+            response = await llm_service.complete(request)
+            
+            if response.success and response.content:
+                return self._parse_scan_strategy_response(response.content, targets)
+            
+        except Exception as e:
+            self.logger.warning(f"LLM consultation failed: {e}")
+        
+        return None
+    
+    def _build_scan_strategy_prompt(
+        self,
+        targets: List[str],
+        target_info: Dict[str, Any]
+    ) -> str:
+        """Build the LLM prompt for scan strategy consultation."""
+        # Analyze target patterns
+        admin_targets = [t for t in targets if "admin" in t.lower()]
+        api_targets = [t for t in targets if "api" in t.lower()]
+        dev_targets = [t for t in targets if any(x in t.lower() for x in ["dev", "staging", "test"])]
+        
+        return f"""You are a security expert advising on scan strategy.
+
+## Situation:
+I discovered {len(targets)} web targets for scanning with Nuclei:
+- Total targets: {len(targets)}
+- Admin-related targets: {len(admin_targets)} (e.g., {admin_targets[:3]})
+- API endpoints: {len(api_targets)} (e.g., {api_targets[:3]})
+- Dev/Staging: {len(dev_targets)} (e.g., {dev_targets[:3]})
+
+Target OS: {target_info.get('os', 'Unknown')}
+Target Priority: {target_info.get('priority', 'medium')}
+
+## Question:
+Should I scan all {len(targets)} targets with Nuclei (time-consuming) or focus on high-value targets?
+
+## Response Format (JSON only):
+{{
+    "strategy": "focused" or "full",
+    "reasoning": "brief explanation",
+    "focused_targets": ["list of targets to prioritize"] or null,
+    "severity_filter": ["critical", "high"] or ["critical", "high", "medium"],
+    "templates": ["specific templates"] or null
+}}
+
+Respond with JSON only."""
+    
+    def _parse_scan_strategy_response(
+        self,
+        response: str,
+        all_targets: List[str]
+    ) -> Optional[Dict[str, Any]]:
+        """Parse LLM response into scan strategy."""
+        import json
+        
+        try:
+            # Try to extract JSON from response using pre-compiled regex
+            if "```" in response:
+                # Extract from code block
+                match = _JSON_CODE_BLOCK_PATTERN.search(response)
+                if match:
+                    response = match.group(1)
+            
+            strategy = json.loads(response)
+            
+            # Validate and normalize
+            result = {
+                "severity_filter": strategy.get("severity_filter", ["critical", "high"]),
+                "templates": strategy.get("templates"),
+            }
+            
+            # Handle focused targets
+            if strategy.get("strategy") == "focused" and strategy.get("focused_targets"):
+                # Ensure focused targets are subset of all targets
+                focused = [t for t in strategy["focused_targets"] if t in all_targets]
+                if focused:
+                    result["focused_targets"] = focused
+            
+            self.logger.info(f"LLM recommended scan strategy: {strategy.get('strategy')}")
+            return result
+            
+        except json.JSONDecodeError:
+            self.logger.warning("Failed to parse LLM scan strategy response")
+            return None
     
     # ═══════════════════════════════════════════════════════════
     # Event Handling

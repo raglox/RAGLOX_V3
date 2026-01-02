@@ -76,6 +76,11 @@ class MissionController:
         # Monitor interval (seconds)
         self._monitor_interval = 5
         
+        # Task Watchdog settings
+        self._watchdog_interval = 30  # Check every 30 seconds
+        self._task_timeout = timedelta(minutes=5)  # Tasks stale after 5 minutes
+        self._max_task_retries = 3  # Max retries before marking FAILED
+        
         # HITL: Pending approval actions
         self._pending_approvals: Dict[str, ApprovalAction] = {}
         
@@ -181,6 +186,7 @@ class MissionController:
         if not self._running:
             self._running = True
             asyncio.create_task(self._monitor_loop())
+            asyncio.create_task(self._watchdog_loop())  # Start Task Watchdog
         
         self.logger.info(f"Mission {mission_id} started successfully")
         return True
@@ -485,6 +491,110 @@ class MissionController:
         heartbeats = await self.blackboard.get_heartbeats(mission_id)
         if not heartbeats:
             self.logger.warning(f"No heartbeats for mission {mission_id}")
+    
+    # ═══════════════════════════════════════════════════════════
+    # Task Watchdog (Zombie Task Hunter)
+    # ═══════════════════════════════════════════════════════════
+    
+    async def _watchdog_loop(self) -> None:
+        """
+        Background task that monitors for zombie/stale tasks.
+        
+        Runs periodically to detect tasks that are:
+        - Status: RUNNING but haven't been updated for too long
+        - Likely abandoned by a crashed specialist
+        
+        Actions:
+        - Re-queue task if retry count < max_retries
+        - Mark as FAILED if retry count >= max_retries
+        """
+        self.logger.info("🐕 Task Watchdog started")
+        
+        while self._running and self._active_missions:
+            try:
+                for mission_id in list(self._active_missions.keys()):
+                    await self._check_zombie_tasks(mission_id)
+                
+                await asyncio.sleep(self._watchdog_interval)
+                
+            except Exception as e:
+                self.logger.error(f"Error in watchdog loop: {e}")
+                await asyncio.sleep(5)
+        
+        self.logger.info("🐕 Task Watchdog stopped")
+    
+    async def _check_zombie_tasks(self, mission_id: str) -> None:
+        """
+        Check for and recover zombie tasks in a mission.
+        
+        A zombie task is one that:
+        - Has status RUNNING
+        - Has not been updated within the timeout period
+        
+        Args:
+            mission_id: Mission ID to check
+        """
+        try:
+            # Get all running tasks
+            running_tasks = await self.blackboard.get_running_tasks(mission_id)
+            
+            if not running_tasks:
+                return
+            
+            now = datetime.utcnow()
+            zombies_found = 0
+            
+            for task_key in running_tasks:
+                task_id = task_key.replace("task:", "")
+                task = await self.blackboard.get_task(task_id)
+                
+                if not task:
+                    continue
+                
+                # Check last update time
+                updated_at_str = task.get("updated_at") or task.get("started_at")
+                if not updated_at_str:
+                    continue
+                
+                try:
+                    updated_at = datetime.fromisoformat(updated_at_str)
+                except ValueError:
+                    self.logger.warning(f"Invalid timestamp for task {task_id}: {updated_at_str}")
+                    continue
+                
+                # Check if task is stale
+                if now - updated_at > self._task_timeout:
+                    zombies_found += 1
+                    retry_count = int(task.get("retry_count", 0))
+                    
+                    if retry_count < self._max_task_retries:
+                        # Re-queue the task
+                        self.logger.warning(
+                            f"🧟 Zombie task detected: {task_id} "
+                            f"(stale for {now - updated_at}). Re-queuing (attempt {retry_count + 1}/{self._max_task_retries})"
+                        )
+                        await self.blackboard.requeue_task(
+                            mission_id=mission_id,
+                            task_id=task_id,
+                            reason=f"watchdog_timeout_after_{(now - updated_at).total_seconds():.0f}s"
+                        )
+                    else:
+                        # Mark as permanently failed
+                        self.logger.error(
+                            f"💀 Task {task_id} exceeded max retries ({self._max_task_retries}). "
+                            f"Marking as FAILED."
+                        )
+                        await self.blackboard.mark_task_failed_permanently(
+                            mission_id=mission_id,
+                            task_id=task_id,
+                            reason=f"max_retries_exceeded_after_{retry_count}_attempts"
+                        )
+            
+            if zombies_found > 0:
+                self.logger.info(f"🐕 Watchdog processed {zombies_found} zombie task(s) for mission {mission_id}")
+                
+        except Exception as e:
+            self.logger.error(f"Error checking zombie tasks: {e}")
     
     # ═══════════════════════════════════════════════════════════
     # Utility Methods
