@@ -270,21 +270,39 @@ def _build_nuclei_context(request: AnalysisRequest) -> str:
     Build Nuclei-specific context for the analysis prompt.
     
     Extracts Nuclei scan data from the request if available.
+    Looks for nuclei data in:
+    1. request.nuclei_context (if added by caller)
+    2. request.task.metadata with nuclei_* keys
+    3. request.error.* fields for nuclei-related data
     """
-    # Check if nuclei context is available in metadata
-    if not hasattr(request, 'metadata'):
-        return "No Nuclei scan data available"
+    nuclei_data = None
     
-    nuclei_data = getattr(request, 'nuclei_context', None)
+    # Try to get nuclei_context attribute first
+    if hasattr(request, 'nuclei_context'):
+        nuclei_data = getattr(request, 'nuclei_context', None)
+    
+    # If not found, try to extract from task metadata
+    if not nuclei_data and hasattr(request.task, 'metadata'):
+        metadata = getattr(request.task, 'metadata', {}) or {}
+        if isinstance(metadata, dict) and any(k.startswith('nuclei') for k in metadata.keys()):
+            nuclei_data = {k: v for k, v in metadata.items() if 'nuclei' in k.lower()}
+    
+    # If still not found, check if module_used contains nuclei reference
+    if not nuclei_data and request.execution.module_used:
+        if 'nuclei' in request.execution.module_used.lower():
+            nuclei_data = {
+                'nuclei_template': request.execution.module_used,
+                'severity': 'unknown'
+            }
+    
     if not nuclei_data:
-        # Try to extract from error or execution context
         return "No Nuclei scan data available"
     
     parts = []
     
     if isinstance(nuclei_data, dict):
         template = nuclei_data.get('nuclei_template', 'Unknown')
-        severity = nuclei_data.get('severity', 'unknown')
+        severity = str(nuclei_data.get('severity', 'unknown')).lower()
         matched_at = nuclei_data.get('matched_at', 'N/A')
         extracted = nuclei_data.get('extracted_results', [])
         curl_cmd = nuclei_data.get('curl_command')
