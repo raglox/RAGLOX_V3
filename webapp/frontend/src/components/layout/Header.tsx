@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { useEventStore, selectConnectionStatus } from '@/stores/eventStore'
+import { MissionSelector } from '@/components/mission/MissionSelector'
 
 export function Header() {
   const connectionStatus = useEventStore(selectConnectionStatus)
@@ -57,8 +58,10 @@ export function Header() {
       isSidebarCollapsed ? "left-[72px]" : "left-56"
     )}>
       <div className="flex h-full items-center justify-between px-6">
-        {/* Left Section - Connection Status */}
+        {/* Left Section - Mission Selector & Connection Status */}
         <div className="flex items-center gap-4">
+          <MissionSelector />
+          <div className="w-px h-6 bg-zinc-700/50" />
           <ConnectionIndicator status={connectionStatus} />
         </div>
         

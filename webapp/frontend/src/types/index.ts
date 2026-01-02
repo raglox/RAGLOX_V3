@@ -90,7 +90,9 @@ export interface Target {
   priority: Priority
   risk_score?: number
   ports: Record<string, string>
+  services?: string[]
   subnet?: string
+  discovered_at?: string
 }
 
 export interface Vulnerability {
@@ -102,6 +104,7 @@ export interface Vulnerability {
   cvss?: number
   status: string
   exploit_available: boolean
+  discovered_at?: string
 }
 
 export interface Credential {

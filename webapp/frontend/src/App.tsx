@@ -10,6 +10,7 @@ import { AIAssistantSidebar } from '@/components/ai/AIAssistantSidebar'
 import { Dashboard } from '@/pages/Dashboard'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useEventStore } from '@/stores/eventStore'
+import { useMissionData } from '@/hooks/useMissionData'
 
 // Workspace Views
 import { ReconView } from '@/components/workspaces/ReconView'
@@ -21,11 +22,21 @@ function App() {
   // Initialize WebSocket connection
   const { isConnected } = useWebSocket({ autoConnect: true })
   
+  // Initialize mission data loading - THIS FIXES THE DATA PIPELINE!
+  const { currentMissionId } = useMissionData()
+  
   // Track if welcome message was already shown
   const welcomeShownRef = useRef(false)
   
-  // Demo: Add some sample data when connected (remove in production)
+  // Access store for logging
   const { addLog, addActivity } = useEventStore()
+  
+  // Log when mission changes
+  useEffect(() => {
+    if (currentMissionId) {
+      console.log('[App] Active mission:', currentMissionId)
+    }
+  }, [currentMissionId])
   
   useEffect(() => {
     // Only show welcome message once per session
