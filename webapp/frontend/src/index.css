@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════
+   RAGLOX v3.0 Design System - Enterprise SaaS Theme
+   Inspired by Vercel/Datadog Dashboards
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Colors - Enterprise Palette */
+  --color-royal-blue: #2563EB;
+  --color-royal-blue-light: #3B82F6;
+  --color-royal-blue-dark: #1D4ED8;
+  
+  /* Status Colors - Muted/Pastel Tones */
+  --color-success: #10B981;
+  --color-success-light: #D1FAE5;
+  --color-success-dark: #059669;
+  
+  --color-warning: #F59E0B;
+  --color-warning-light: #FEF3C7;
+  --color-warning-dark: #D97706;
+  
+  --color-critical: #EF4444;
+  --color-critical-light: #FEE2E2;
+  --color-critical-dark: #DC2626;
+  
+  --color-info: #3B82F6;
+  --color-info-light: #DBEAFE;
+  --color-info-dark: #2563EB;
+  
+  /* Background Colors */
+  --color-bg-light: #F8FAFC;
+  --color-bg-dark: #020617;
+  --color-bg-card-light: #FFFFFF;
+  --color-bg-card-dark: #0F172A;
+  --color-bg-elevated-light: #F1F5F9;
+  --color-bg-elevated-dark: #1E293B;
+  
+  /* Border Colors */
+  --color-border-light: #E2E8F0;
+  --color-border-dark: #334155;
+  
+  /* Text Colors */
+  --color-text-primary-light: #0F172A;
+  --color-text-primary-dark: #F8FAFC;
+  --color-text-secondary-light: #64748B;
+  --color-text-secondary-dark: #94A3B8;
+  --color-text-muted-light: #94A3B8;
+  --color-text-muted-dark: #64748B;
+
+  /* Fonts */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  
+  /* Spacing */
+  --spacing-sidebar: 16rem;
+  --spacing-sidebar-collapsed: 4rem;
+  --spacing-header: 4rem;
+  --spacing-console: 3rem;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  
+  /* Border Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+}
+
+/* Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--color-bg-light);
+  color: var(--color-text-primary-light);
+}
+
+/* Dark Mode */
+.dark body {
+  background-color: var(--color-bg-dark);
+  color: var(--color-text-primary-dark);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: var(--radius-full);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-royal-blue);
+  color: white;
+}
+
+/* Focus Ring */
+:focus-visible {
+  outline: 2px solid var(--color-royal-blue);
+  outline-offset: 2px;
+}
+
+/* Code/Mono Font */
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Status Dot Animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Slide In Animation */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-slide-out-right {
+  animation: slideOutRight 0.3s ease-in;
+}
+
+/* Fade Animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Terminal/Console Styling */
+.xterm {
+  padding: 8px;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+}

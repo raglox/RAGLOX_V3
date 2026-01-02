@@ -129,3 +129,11 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# ═══════════════════════════════════════════════════════════════
+# Frontend (Node.js/React)
+# ═══════════════════════════════════════════════════════════════
+node_modules/
+webapp/frontend/dist/
+webapp/frontend/.vite/
+*.tsbuildinfo
