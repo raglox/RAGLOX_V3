@@ -26,6 +26,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY)
   const shouldReconnectRef = useRef(true)
+  const isConnectingRef = useRef(false)
   
   const {
     wsState,
@@ -101,11 +102,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   
   // Connect to WebSocket
   const connect = useCallback(() => {
+    // Prevent duplicate connections
+    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
+      return
+    }
+    
     // Clean up existing connection
     if (wsRef.current) {
       wsRef.current.close()
     }
     
+    isConnectingRef.current = true
     clearReconnectTimeout()
     setConnectionStatus('connecting')
     shouldReconnectRef.current = true
@@ -118,6 +125,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     
     ws.onopen = () => {
       console.log('[WebSocket] Connected')
+      isConnectingRef.current = false
       setConnectionStatus('connected')
       resetReconnectAttempts()
       reconnectDelayRef.current = INITIAL_RECONNECT_DELAY
@@ -135,16 +143,19 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     
     ws.onerror = (error) => {
       console.error('[WebSocket] Error:', error)
+      isConnectingRef.current = false
       setConnectionStatus('disconnected', 'Connection error')
     }
     
     ws.onclose = (event) => {
       console.log('[WebSocket] Closed:', event.code, event.reason)
+      isConnectingRef.current = false
       clearPingInterval()
       wsRef.current = null
       
       // Don't reconnect if intentionally closed (code 1000)
       if (event.code !== 1000 && shouldReconnectRef.current) {
+        console.log('[WebSocket] Will attempt reconnection...')
         scheduleReconnect()
       } else {
         setConnectionStatus('disconnected')
@@ -193,7 +204,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   // Auto-connect on mount
   useEffect(() => {
     if (autoConnect) {
-      connect()
+      // Small delay to allow React StrictMode double-mount to settle
+      const timer = setTimeout(() => {
+        connect()
+      }, 100)
+      
+      return () => {
+        clearTimeout(timer)
+        disconnect()
+      }
     }
     
     return () => {
