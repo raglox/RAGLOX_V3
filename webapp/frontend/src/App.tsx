@@ -15,6 +15,7 @@ import { useMissionData } from '@/hooks/useMissionData'
 // Workspace Views
 import { ReconView } from '@/components/workspaces/ReconView'
 import { OperationsView } from '@/components/workspaces/OperationsView'
+import { OperationsViewManus } from '@/components/workspaces/OperationsViewManus'
 import { LootView } from '@/components/workspaces/LootView'
 import { MissionSetupWizard } from '@/components/wizard/MissionSetupWizard'
 
@@ -72,8 +73,11 @@ function App() {
           {/* Workspace A - Scope & Recon */}
           <Route path="/recon" element={<ReconView />} />
           
-          {/* Workspace B - Active Operations */}
-          <Route path="/operations" element={<OperationsView />} />
+          {/* Workspace B - Active Operations (Manus Style) */}
+          <Route path="/operations" element={<OperationsViewManus />} />
+          
+          {/* Workspace B - Active Operations (Legacy) */}
+          <Route path="/operations-legacy" element={<OperationsView />} />
           
           {/* Workspace C - Loot & Access */}
           <Route path="/loot" element={<LootView />} />
