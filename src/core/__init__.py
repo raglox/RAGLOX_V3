@@ -53,6 +53,11 @@ from .knowledge import (
     Tactic,
     KnowledgeStats,
 )
+from .scanners import (
+    NucleiScanner,
+    NucleiScanResult,
+    NucleiVulnerability,
+)
 
 __all__ = [
     # Blackboard
@@ -103,4 +108,8 @@ __all__ = [
     "Technique",
     "Tactic",
     "KnowledgeStats",
+    # Scanners
+    "NucleiScanner",
+    "NucleiScanResult",
+    "NucleiVulnerability",
 ]
