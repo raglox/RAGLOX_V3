@@ -23,6 +23,9 @@ from ..core.scanners import NucleiScanner, NucleiScanResult
 if TYPE_CHECKING:
     from ..executors import RXModuleRunner, ExecutorFactory
 
+# Pre-compiled regex for parsing JSON from LLM responses
+_JSON_CODE_BLOCK_PATTERN = re.compile(r'```(?:json)?\s*([\s\S]*?)\s*```')
+
 
 class ReconSpecialist(BaseSpecialist):
     """
@@ -125,9 +128,12 @@ class ReconSpecialist(BaseSpecialist):
         # Nuclei scanner instance (lazy-loaded)
         self._nuclei_scanner: Optional[NucleiScanner] = None
         
-        # AI consultation settings
+        # AI consultation settings (configurable via settings)
         self._ai_consultation_enabled = True
-        self._ai_consultation_threshold = 10  # Consult LLM if more than N subdomains
+        # Threshold can be overridden via settings.nuclei_ai_consultation_threshold
+        self._ai_consultation_threshold = getattr(
+            self.settings, 'nuclei_ai_consultation_threshold', 10
+        )  # Consult LLM if more than N subdomains
     
     @property
     def nuclei_scanner(self) -> NucleiScanner:
@@ -777,11 +783,10 @@ Respond with JSON only."""
         import json
         
         try:
-            # Try to extract JSON from response
+            # Try to extract JSON from response using pre-compiled regex
             if "```" in response:
                 # Extract from code block
-                import re
-                match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
+                match = _JSON_CODE_BLOCK_PATTERN.search(response)
                 if match:
                     response = match.group(1)
             

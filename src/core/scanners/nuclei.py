@@ -15,6 +15,10 @@ from uuid import UUID, uuid4
 
 from ..models import Vulnerability, Severity
 
+# Constants for RX module ID generation
+RX_MODULE_PREFIX = "rx-"
+RX_NUCLEI_PREFIX = "rx-nuclei-"
+
 
 class NucleiSeverity(str, Enum):
     """Nuclei severity levels mapped to RAGLOX severity."""
@@ -88,13 +92,13 @@ class NucleiVulnerability:
         # Build RX modules suggestion based on vulnerability type
         rx_modules = []
         if self.vuln_type and self.vuln_type.startswith("CVE-"):
-            # Generate RX module ID from CVE
-            rx_module_id = f"rx-{self.vuln_type.lower().replace('-', '_')}"
+            # Generate RX module ID from CVE using constant prefix
+            rx_module_id = f"{RX_MODULE_PREFIX}{self.vuln_type.lower().replace('-', '_')}"
             rx_modules.append(rx_module_id)
         
-        # Add template-based module suggestion
+        # Add template-based module suggestion using constant prefix
         if self.template_id:
-            rx_modules.append(f"rx-nuclei-{self.template_id}")
+            rx_modules.append(f"{RX_NUCLEI_PREFIX}{self.template_id}")
         
         return Vulnerability(
             mission_id=mission_id,
