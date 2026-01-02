@@ -128,11 +128,32 @@ class Blackboard:
         await self.redis.hset(key, mapping=serialized)
     
     async def _get_hash(self, key: str) -> Optional[Dict[str, Any]]:
-        """Get a hash from Redis."""
+        """
+        Get a hash from Redis and deserialize JSON fields.
+        
+        This method properly deserializes complex fields (lists, dicts) that were
+        JSON-serialized during _set_hash(). This ensures that when AttackSpecialist
+        retrieves a Vulnerability, fields like rx_modules and metadata are proper
+        Python objects, not JSON strings.
+        """
         data = await self.redis.hgetall(key)
         if not data:
             return None
-        return data
+        
+        # Deserialize JSON strings back to objects
+        deserialized = {}
+        for k, v in data.items():
+            # Try to parse as JSON if it looks like JSON
+            if isinstance(v, str) and v and (v.startswith('[') or v.startswith('{')):
+                try:
+                    deserialized[k] = json.loads(v)
+                except json.JSONDecodeError:
+                    # Not valid JSON, keep as string
+                    deserialized[k] = v
+            else:
+                deserialized[k] = v
+        
+        return deserialized
     
     async def _delete(self, key: str) -> None:
         """Delete a key from Redis."""
