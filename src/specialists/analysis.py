@@ -22,7 +22,7 @@ from ..core.models import (
 )
 from ..core.blackboard import Blackboard
 from ..core.config import Settings, get_settings
-from ..core.knowledge import EmbeddedKnowledge
+from ..core.knowledge import EmbeddedKnowledge, NucleiTemplate
 
 # LLM imports
 if TYPE_CHECKING:
@@ -546,8 +546,239 @@ class AnalysisSpecialist(BaseSpecialist):
                 context["alternative_techniques"] = [
                     m.get("technique_id") for m in evasion_modules if m.get("technique_id")
                 ]
+            
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Query Nuclei CVE API for alternative exploitation paths
+            # If vulnerability is High severity and exploit failed, search for
+            # related Nuclei templates that might provide alternative approaches
+            # ═══════════════════════════════════════════════════════════
+            vuln_info = context.get("vuln_info")
+            if vuln_info:
+                vuln_severity = vuln_info.get("severity", "").lower()
+                vuln_type = vuln_info.get("type", "")
+                cve_id = vuln_info.get("cve_id") or vuln_type  # Use CVE ID or vuln type
+                
+                # Search for alternative Nuclei templates if High severity exploit failed
+                if vuln_severity in ["high", "critical"]:
+                    nuclei_alternatives = await self._search_nuclei_alternatives(
+                        cve_id=cve_id,
+                        vuln_type=vuln_type,
+                        error_context=error_context
+                    )
+                    context["nuclei_alternatives"] = nuclei_alternatives
         
         return context
+    
+    async def _search_nuclei_alternatives(
+        self,
+        cve_id: str,
+        vuln_type: str,
+        error_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        AI-Driven Nuclei Template Search for Alternative Exploitation Paths.
+        
+        When a High severity vulnerability exploit fails, this method searches
+        the Nuclei Knowledge Base for alternative approaches:
+        
+        1. First, try to find the exact CVE in Nuclei templates
+        2. If found, look for related templates (same technology/protocol)
+        3. Extract alternative exploitation techniques from template info
+        
+        This implements the AI-to-Nuclei Logic Wiring for failed exploit analysis.
+        
+        Args:
+            cve_id: CVE ID or vulnerability identifier
+            vuln_type: Vulnerability type/name
+            error_context: Context from the failed task
+            
+        Returns:
+            Dict containing alternative approaches from Nuclei knowledge base
+        """
+        if not self.knowledge or not self.knowledge.is_loaded():
+            return {"available": False, "reason": "Knowledge base not loaded"}
+        
+        alternatives = {
+            "available": True,
+            "cve_template": None,
+            "related_templates": [],
+            "alternative_approaches": [],
+            "ai_plan_messages": []
+        }
+        
+        # Step 1: Try to find exact CVE template
+        if cve_id and cve_id.upper().startswith("CVE-"):
+            ai_plan_msg = (
+                f"[AI-PLAN] Exploit failed for {cve_id}. "
+                f"Searching Nuclei Knowledge Base for alternative approaches..."
+            )
+            alternatives["ai_plan_messages"].append(ai_plan_msg)
+            self.logger.info(ai_plan_msg)
+            
+            cve_template = self.knowledge.get_nuclei_template_by_cve(cve_id)
+            if cve_template:
+                alternatives["cve_template"] = cve_template
+                
+                # Extract tags and references for finding related templates
+                template_tags = cve_template.get("tags", [])
+                template_protocol = cve_template.get("protocol", [])
+                
+                ai_plan_msg = (
+                    f"[AI-PLAN] Found Nuclei template for {cve_id}: "
+                    f"{cve_template.get('name')}. Tags: {template_tags[:5]}..."
+                )
+                alternatives["ai_plan_messages"].append(ai_plan_msg)
+                self.logger.info(ai_plan_msg)
+                
+                # Step 2: Search for related templates by tags
+                for tag in template_tags[:3]:  # Top 3 tags
+                    related = self.knowledge.get_nuclei_templates_by_tag(
+                        tag=tag,
+                        limit=10
+                    )
+                    for rt in related:
+                        if rt.get("template_id") != cve_template.get("template_id"):
+                            if rt not in alternatives["related_templates"]:
+                                alternatives["related_templates"].append(rt)
+                
+                # Step 3: Generate alternative approaches
+                alternatives["alternative_approaches"] = self._generate_alternative_approaches(
+                    cve_template=cve_template,
+                    related_templates=alternatives["related_templates"],
+                    error_context=error_context
+                )
+        
+        # If no CVE template found, search by vuln type
+        if not alternatives["cve_template"] and vuln_type:
+            ai_plan_msg = (
+                f"[AI-PLAN] No direct CVE template found. "
+                f"Searching by vulnerability type: {vuln_type}..."
+            )
+            alternatives["ai_plan_messages"].append(ai_plan_msg)
+            self.logger.info(ai_plan_msg)
+            
+            # Search Nuclei templates by vulnerability type
+            search_results = self.knowledge.search_nuclei_templates(
+                query=vuln_type,
+                limit=20
+            )
+            
+            if search_results:
+                alternatives["related_templates"] = search_results
+                ai_plan_msg = (
+                    f"[AI-PLAN] Found {len(search_results)} related Nuclei templates "
+                    f"for vulnerability type: {vuln_type}"
+                )
+                alternatives["ai_plan_messages"].append(ai_plan_msg)
+                self.logger.info(ai_plan_msg)
+                
+                # Generate approaches from search results
+                alternatives["alternative_approaches"] = self._generate_alternative_approaches(
+                    cve_template=None,
+                    related_templates=search_results,
+                    error_context=error_context
+                )
+        
+        # Log to Blackboard for Execution Stream visibility
+        if self.blackboard and self._current_mission_id:
+            await self.blackboard.log_result(
+                self._current_mission_id,
+                "ai_plan",
+                {
+                    "event": "nuclei_alternative_search",
+                    "cve_id": cve_id,
+                    "vuln_type": vuln_type,
+                    "found_cve_template": alternatives["cve_template"] is not None,
+                    "related_templates_count": len(alternatives["related_templates"]),
+                    "alternative_approaches_count": len(alternatives["alternative_approaches"]),
+                    "messages": alternatives["ai_plan_messages"]
+                }
+            )
+        
+        return alternatives
+    
+    def _generate_alternative_approaches(
+        self,
+        cve_template: Optional[Dict[str, Any]],
+        related_templates: List[Dict[str, Any]],
+        error_context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate alternative exploitation approaches based on Nuclei templates.
+        
+        Analyzes the templates to suggest different attack vectors,
+        evasion techniques, or alternative exploitation paths.
+        
+        Args:
+            cve_template: Direct CVE template if found
+            related_templates: Related templates from search
+            error_context: Original error context
+            
+        Returns:
+            List of alternative approach suggestions
+        """
+        approaches = []
+        error_type = error_context.get("error_type", "unknown").lower()
+        
+        # Approach 1: If defense detected, suggest templates with evasion
+        if "defense" in error_type or "blocked" in error_type:
+            evasion_templates = [
+                t for t in related_templates
+                if any(tag in ["evasion", "bypass", "waf-bypass"] 
+                       for tag in t.get("tags", []))
+            ]
+            if evasion_templates:
+                approaches.append({
+                    "type": "evasion",
+                    "description": "Defense detected. Try templates with evasion capabilities.",
+                    "suggested_templates": [t.get("template_id") for t in evasion_templates[:5]],
+                    "reasoning": "These templates include WAF bypass or evasion techniques."
+                })
+        
+        # Approach 2: Try different protocols/methods
+        if cve_template:
+            template_protocol = cve_template.get("protocol", [])
+            alt_protocol_templates = [
+                t for t in related_templates
+                if t.get("protocol") and t.get("protocol") != template_protocol
+            ]
+            if alt_protocol_templates:
+                approaches.append({
+                    "type": "protocol_switch",
+                    "description": f"Try alternative protocol. Original: {template_protocol}",
+                    "suggested_templates": [t.get("template_id") for t in alt_protocol_templates[:5]],
+                    "reasoning": "Different protocols may bypass current defenses."
+                })
+        
+        # Approach 3: Look for exploit chain templates
+        chain_templates = [
+            t for t in related_templates
+            if any(tag in ["chain", "multi-step", "exploit-chain"] 
+                   for tag in t.get("tags", []))
+        ]
+        if chain_templates:
+            approaches.append({
+                "type": "exploit_chain",
+                "description": "Consider multi-step exploitation.",
+                "suggested_templates": [t.get("template_id") for t in chain_templates[:5]],
+                "reasoning": "Chained exploits may succeed where single exploits fail."
+            })
+        
+        # Approach 4: Lower severity reconnaissance
+        if not approaches:
+            info_templates = [
+                t for t in related_templates
+                if t.get("severity", "").lower() in ["info", "low"]
+            ]
+            if info_templates:
+                approaches.append({
+                    "type": "reconnaissance",
+                    "description": "Gather more information before retrying exploit.",
+                    "suggested_templates": [t.get("template_id") for t in info_templates[:5]],
+                    "reasoning": "Additional recon may reveal better attack vectors."
+                })
+        
+        return approaches
     
     def _get_target_platform(self, target_info: Optional[Dict[str, Any]]) -> Optional[str]:
         """Extract platform from target info."""
@@ -605,7 +836,40 @@ class AnalysisSpecialist(BaseSpecialist):
         
         # Defense detected - try alternatives or skip
         if category == "defense":
-            if context["alternative_modules"]:
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Check Nuclei alternatives for High severity vulns
+            # ═══════════════════════════════════════════════════════════
+            nuclei_alts = context.get("nuclei_alternatives", {})
+            if nuclei_alts.get("alternative_approaches"):
+                best_approach = nuclei_alts["alternative_approaches"][0]
+                self._stats["modifications_recommended"] += 1
+                
+                ai_plan_msg = (
+                    f"[AI-PLAN] Defense blocked exploit. Found Nuclei alternative: "
+                    f"{best_approach.get('type')} - {best_approach.get('description')}"
+                )
+                self.logger.info(ai_plan_msg)
+                
+                return {
+                    "decision": "modify_approach",
+                    "reasoning": (
+                        f"Defense detected ({detected_defenses}). "
+                        f"AI-PLAN suggests: {best_approach.get('description')}"
+                    ),
+                    "nuclei_approach": best_approach,
+                    "nuclei_templates": best_approach.get("suggested_templates", []),
+                    "modified_parameters": {
+                        "use_evasion": True,
+                        "encode_payload": True,
+                        "nuclei_guided": True
+                    },
+                    "recommendations": [
+                        best_approach.get("reasoning"),
+                        *strategy["recommendations"]
+                    ],
+                    "ai_plan_messages": nuclei_alts.get("ai_plan_messages", [])
+                }
+            elif context["alternative_modules"]:
                 self._stats["modifications_recommended"] += 1
                 return {
                     "decision": "modify_approach",
@@ -625,8 +889,46 @@ class AnalysisSpecialist(BaseSpecialist):
                     "recommendations": strategy["recommendations"]
                 }
         
-        # Vulnerability patched - skip
+        # Vulnerability patched - check Nuclei for reconnaissance or skip
         if category == "vulnerability":
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Before skipping, check if Nuclei suggests recon
+            # ═══════════════════════════════════════════════════════════
+            nuclei_alts = context.get("nuclei_alternatives", {})
+            recon_approaches = [
+                a for a in nuclei_alts.get("alternative_approaches", [])
+                if a.get("type") == "reconnaissance"
+            ]
+            
+            if recon_approaches:
+                recon_approach = recon_approaches[0]
+                ai_plan_msg = (
+                    f"[AI-PLAN] Vulnerability appears patched. "
+                    f"Suggesting additional reconnaissance via Nuclei templates."
+                )
+                self.logger.info(ai_plan_msg)
+                
+                self._stats["modifications_recommended"] += 1
+                return {
+                    "decision": "modify_approach",
+                    "reasoning": (
+                        "Target may be patched. AI-PLAN suggests gathering more "
+                        "information before giving up."
+                    ),
+                    "nuclei_approach": recon_approach,
+                    "nuclei_templates": recon_approach.get("suggested_templates", []),
+                    "modified_parameters": {
+                        "perform_recon": True,
+                        "nuclei_guided": True
+                    },
+                    "recommendations": [
+                        recon_approach.get("reasoning"),
+                        "Run additional Nuclei scans before skipping this target",
+                        *strategy["recommendations"]
+                    ],
+                    "ai_plan_messages": nuclei_alts.get("ai_plan_messages", [])
+                }
+            
             self._stats["skips_recommended"] += 1
             return {
                 "decision": "skip",

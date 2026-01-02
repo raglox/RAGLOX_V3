@@ -1611,6 +1611,326 @@ ws.onmessage = (event) => {
 
 ---
 
+## 11. AI-to-Nuclei Logic Wiring 🧠
+
+### 11.1 نظرة عامة
+
+**AI-to-Nuclei Logic Wiring** هو تفعيل الربط الذكي بين نظام الذكاء الاصطناعي وقاعدة معرفة Nuclei Templates.
+
+الهدف: عندما يكتشف النظام منفذاً معيناً (مثل 80 أو 443)، يقوم تلقائياً بـ:
+1. تحليل "بصمة التقنية" (Technology Fingerprint)
+2. البحث في Knowledge Base عن قوالب Nuclei المناسبة
+3. اختيار قوالب Info/Low للاستطلاع الأولي
+4. إرسال رسائل `[AI-PLAN]` عبر WebSocket للعرض في Execution Stream
+
+### 11.2 رسائل AI-PLAN في الواجهة
+
+#### 11.2.1 حدث WebSocket جديد: `ai_plan`
+
+```javascript
+// WebSocket event format
+{
+  "type": "mission_update",
+  "mission_id": "uuid",
+  "data": {
+    "event": "ai_plan",
+    "subtype": "nuclei_template_selection",
+    "port": 80,
+    "templates_count": 15,
+    "message": "[AI-PLAN] Found Port 80. Selecting 15 Nuclei templates based on technology fingerprint...",
+    "templates": ["apache-detect", "nginx-detect", "wordpress-detect", ...]
+  },
+  "timestamp": "2026-01-02T11:00:00"
+}
+```
+
+#### 11.2.2 عرض الرسائل في UI
+
+**الاستخدام في Execution Stream:**
+
+```jsx
+// React component example
+const ExecutionStream = ({ missionId }) => {
+  const [events, setEvents] = useState([]);
+  
+  useEffect(() => {
+    const ws = new WebSocket(`ws://host:8000/ws/missions/${missionId}`);
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      // Handle AI-PLAN events specially
+      if (data.type === 'mission_update' && data.data?.event === 'ai_plan') {
+        setEvents(prev => [...prev, {
+          type: 'ai_plan',
+          icon: '🧠',
+          color: 'purple',
+          message: data.data.message,
+          details: {
+            port: data.data.port,
+            templatesCount: data.data.templates_count,
+            templates: data.data.templates
+          },
+          timestamp: data.timestamp
+        }]);
+      }
+    };
+  }, [missionId]);
+  
+  return (
+    <div className="execution-stream">
+      {events.map((event, idx) => (
+        <EventCard key={idx} {...event} />
+      ))}
+    </div>
+  );
+};
+```
+
+### 11.3 صفحة Arsenal - البحث في Nuclei Templates
+
+#### 11.3.1 Endpoints للبحث
+
+```http
+# البحث اللحظي في قوالب Nuclei
+GET /api/v1/knowledge/nuclei/search?q=apache&severity=info&limit=20
+
+Response:
+[
+  {
+    "template_id": "apache-detect",
+    "name": "Apache Detection",
+    "severity": "info",
+    "tags": ["http", "apache", "tech"],
+    "protocol": ["http"],
+    "description": "Detects Apache web server"
+  },
+  ...
+]
+```
+
+```http
+# الحصول على قالب بـ CVE ID
+GET /api/v1/knowledge/nuclei/cve/CVE-2021-44228
+
+Response:
+{
+  "template_id": "CVE-2021-44228",
+  "name": "Log4Shell RCE",
+  "severity": "critical",
+  "cve_id": ["CVE-2021-44228"],
+  "cvss_score": 10.0,
+  "tags": ["cve", "rce", "log4j", "java"],
+  "description": "Apache Log4j Remote Code Execution"
+}
+```
+
+#### 11.3.2 مكون البحث اللحظي (Live Search)
+
+```jsx
+// React component for Arsenal page
+const NucleiSearchPanel = () => {
+  const [query, setQuery] = useState('');
+  const [severity, setSeverity] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (query.length >= 2) {
+        searchNucleiTemplates();
+      }
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [query, severity]);
+  
+  const searchNucleiTemplates = async () => {
+    setLoading(true);
+    const params = new URLSearchParams({ q: query });
+    if (severity) params.append('severity', severity);
+    
+    const response = await fetch(`/api/v1/knowledge/nuclei/search?${params}`);
+    const data = await response.json();
+    setResults(data);
+    setLoading(false);
+  };
+  
+  return (
+    <div className="nuclei-search-panel">
+      <div className="search-controls">
+        <input
+          type="text"
+          placeholder="Search Nuclei templates (e.g., CVE-2021-44228, apache, wordpress)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="search-input"
+        />
+        
+        <select 
+          value={severity} 
+          onChange={(e) => setSeverity(e.target.value)}
+          className="severity-filter"
+        >
+          <option value="">All Severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="info">Info</option>
+        </select>
+      </div>
+      
+      <div className="results-grid">
+        {loading ? (
+          <LoadingSpinner />
+        ) : (
+          results.map(template => (
+            <NucleiTemplateCard key={template.template_id} template={template} />
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+```
+
+### 11.4 تدفق AI-to-Nuclei الكامل
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      AI-to-Nuclei Logic Wiring Flow                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+1. Port Discovery (ReconSpecialist)
+   ┌─────────────────────┐
+   │ Port 80 Discovered  │
+   └──────────┬──────────┘
+              │
+              ▼
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ [AI-PLAN] Technology Fingerprint: ["http", "apache", "nginx"]   │
+   └──────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+2. Template Selection
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ Knowledge Base Query:                                            │
+   │ - get_nuclei_templates_by_severity("info", limit=100)           │
+   │ - get_nuclei_templates_by_severity("low", limit=100)            │
+   │ - search_nuclei_templates(query="http", severity="info")        │
+   └──────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ [AI-PLAN] Found Port 80. Selecting 15 Nuclei templates          │
+   │           based on technology fingerprint...                     │
+   └──────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+3. WebSocket Event
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ Blackboard.log_result("ai_plan", {                              │
+   │   "event": "nuclei_template_selection",                         │
+   │   "port": 80,                                                   │
+   │   "templates_count": 15,                                        │
+   │   "message": "[AI-PLAN] Found Port 80. Selecting..."            │
+   │ })                                                              │
+   └──────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+4. Frontend Display
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ 🧠 [AI-PLAN] Found Port 80. Selecting 15 Nuclei templates       │
+   │              based on technology fingerprint...                  │
+   │    ├── apache-detect                                            │
+   │    ├── nginx-detect                                             │
+   │    ├── wordpress-detect                                         │
+   │    └── ...12 more templates                                     │
+   └──────────────────────────────────────────────────────────────────┘
+
+
+─────────────────────────────────────────────────────────────────────────
+
+5. Exploit Failure (AnalysisSpecialist)
+   ┌─────────────────────────────┐
+   │ CVE-2021-44228 Exploit     │
+   │ Failed (WAF Detected)       │
+   └──────────────┬──────────────┘
+                  │
+                  ▼
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ [AI-PLAN] Exploit failed for CVE-2021-44228.                    │
+   │           Searching Nuclei Knowledge Base for alternatives...    │
+   └──────────────────────────────────────────────────────────────────┘
+                  │
+                  ▼
+6. Alternative Search
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ Knowledge Base Query:                                            │
+   │ - get_nuclei_template_by_cve("CVE-2021-44228")                  │
+   │ - get_nuclei_templates_by_tag("waf-bypass", limit=10)           │
+   │ - search_nuclei_templates("evasion", severity="medium")         │
+   └──────────────────────────────────────────────────────────────────┘
+                  │
+                  ▼
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ [AI-PLAN] Found Nuclei template for CVE-2021-44228.             │
+   │           Suggesting alternative approach: evasion               │
+   │           - waf-bypass-generic                                   │
+   │           - log4j-bypass-waf                                     │
+   └──────────────────────────────────────────────────────────────────┘
+                  │
+                  ▼
+7. Decision with Nuclei Guidance
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ {                                                               │
+   │   "decision": "modify_approach",                                │
+   │   "reasoning": "Defense detected. AI-PLAN suggests: Try         │
+   │                WAF bypass techniques.",                         │
+   │   "nuclei_approach": {                                          │
+   │     "type": "evasion",                                          │
+   │     "suggested_templates": ["waf-bypass-generic", ...],         │
+   │     "reasoning": "These templates include WAF bypass..."        │
+   │   }                                                             │
+   │ }                                                               │
+   └──────────────────────────────────────────────────────────────────┘
+```
+
+### 11.5 API Endpoints للاستخدام في Arsenal
+
+| Endpoint | الوصف | الاستخدام |
+|----------|-------|----------|
+| `GET /api/v1/knowledge/nuclei/templates` | قائمة القوالب مع pagination | عرض كل القوالب |
+| `GET /api/v1/knowledge/nuclei/search?q=...` | البحث اللحظي | البحث السريع |
+| `GET /api/v1/knowledge/nuclei/cve/{cve_id}` | قالب محدد بـ CVE | تفاصيل CVE |
+| `GET /api/v1/knowledge/nuclei/severity/{sev}` | قوالب حسب الشدة | فلترة |
+| `GET /api/v1/knowledge/nuclei/critical` | القوالب الحرجة فقط | Quick access |
+| `GET /api/v1/knowledge/nuclei/rce` | قوالب RCE | Quick access |
+
+### 11.6 أيقونات وألوان للـ UI
+
+```javascript
+const AI_PLAN_STYLES = {
+  icon: '🧠',
+  color: '#9333ea', // purple-600
+  backgroundColor: 'rgba(147, 51, 234, 0.1)',
+  borderColor: 'rgba(147, 51, 234, 0.3)',
+  
+  // Badge colors for severity
+  severity: {
+    critical: { bg: '#dc2626', text: '#ffffff' }, // red-600
+    high: { bg: '#ea580c', text: '#ffffff' },     // orange-600
+    medium: { bg: '#ca8a04', text: '#ffffff' },   // yellow-600
+    low: { bg: '#16a34a', text: '#ffffff' },      // green-600
+    info: { bg: '#2563eb', text: '#ffffff' },     // blue-600
+  }
+};
+```
+
+---
+
 ## الخلاصة
 
 هذه الوثيقة تغطي كل ما يحتاجه المطور لبناء فرونت-إند جديد بأسلوب Manus:
@@ -1620,6 +1940,7 @@ ws.onmessage = (event) => {
 3. **WebSocket** - الأحداث الحية وأشكالها
 4. **HITL** - نظام الموافقات البشرية
 5. **تدفق البيانات** - من الباك-إند للفرونت-إند
+6. **AI-to-Nuclei Logic Wiring** - تفعيل الذكاء مع Nuclei 🧠
 
 للأسئلة أو التوضيحات، راجع ملفات الكود المصدري المذكورة أو API docs على `/docs`.
 
@@ -1627,3 +1948,4 @@ ws.onmessage = (event) => {
 
 *آخر تحديث: 2026-01-02*
 *الإصدار: 3.0.0*
+*جديد: AI-to-Nuclei Logic Wiring ✅*

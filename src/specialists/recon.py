@@ -17,7 +17,7 @@ from ..core.models import (
 )
 from ..core.blackboard import Blackboard
 from ..core.config import Settings
-from ..core.knowledge import EmbeddedKnowledge
+from ..core.knowledge import EmbeddedKnowledge, NucleiTemplate
 from ..core.scanners import NucleiScanner, NucleiScanResult
 
 if TYPE_CHECKING:
@@ -134,6 +134,26 @@ class ReconSpecialist(BaseSpecialist):
         self._ai_consultation_threshold = getattr(
             self.settings, 'nuclei_ai_consultation_threshold', 10
         )  # Consult LLM if more than N subdomains
+        
+        # Port-to-technology fingerprints for intelligent template selection
+        self._port_technology_map = {
+            80: ["http", "apache", "nginx", "iis", "web"],
+            443: ["https", "ssl", "tls", "web", "apache", "nginx"],
+            8080: ["http-proxy", "tomcat", "jenkins", "web"],
+            8443: ["https-alt", "tomcat", "web"],
+            3000: ["nodejs", "express", "react"],
+            5000: ["flask", "python", "api"],
+            8000: ["django", "python", "uvicorn"],
+            9000: ["php-fpm", "sonarqube"],
+            4443: ["api", "web"],
+            21: ["ftp"],
+            22: ["ssh"],
+            25: ["smtp", "mail"],
+            3306: ["mysql", "mariadb"],
+            5432: ["postgresql", "postgres"],
+            6379: ["redis"],
+            27017: ["mongodb"],
+        }
     
     @property
     def nuclei_scanner(self) -> NucleiScanner:
@@ -512,6 +532,9 @@ class ReconSpecialist(BaseSpecialist):
     async def _execute_service_enum(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
         Enumerate services on a target.
+        
+        This method now integrates with the Nuclei Knowledge Base to
+        automatically select Info/Low severity templates for web ports.
         """
         target_id = task.get("target_id")
         if not target_id:
@@ -528,6 +551,9 @@ class ReconSpecialist(BaseSpecialist):
         ports = await self.blackboard.get_target_ports(target_id)
         
         services_found = []
+        nuclei_templates_selected = []
+        ai_plan_messages = []
+        
         for port_str, service_name in ports.items():
             port = int(port_str)
             
@@ -542,6 +568,39 @@ class ReconSpecialist(BaseSpecialist):
             }
             services_found.append(service)
             
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Intelligent Nuclei Template Selection
+            # Automatically select Info/Low templates for web ports (80/443)
+            # ═══════════════════════════════════════════════════════════
+            if port in (80, 443, 8080, 8443, 3000, 5000, 8000):
+                templates = await self._select_nuclei_templates_for_port(
+                    port=port,
+                    target_id=target_id,
+                    service_info=service_info
+                )
+                if templates:
+                    nuclei_templates_selected.extend(templates)
+                    ai_plan_msg = (
+                        f"[AI-PLAN] Found Port {port}. Selecting {len(templates)} "
+                        f"Nuclei templates based on technology fingerprint..."
+                    )
+                    ai_plan_messages.append(ai_plan_msg)
+                    self.logger.info(ai_plan_msg)
+                    
+                    # Log to execution stream via Blackboard
+                    if self.blackboard and self._current_mission_id:
+                        await self.blackboard.log_result(
+                            self._current_mission_id,
+                            "ai_plan",
+                            {
+                                "event": "nuclei_template_selection",
+                                "port": port,
+                                "templates_count": len(templates),
+                                "message": ai_plan_msg,
+                                "templates": [t.get("template_id") for t in templates[:10]]
+                            }
+                        )
+            
             # Check for known vulnerabilities
             if service_info[0] in self._vuln_checks:
                 for vuln_id, vuln_name, severity in self._vuln_checks[service_info[0]]:
@@ -555,10 +614,122 @@ class ReconSpecialist(BaseSpecialist):
                         rx_modules=[f"rx-{vuln_id.lower().replace('-', '_')}"]
                     )
         
+        # Create vuln scan task if web templates were selected
+        if nuclei_templates_selected:
+            await self.create_task(
+                task_type=TaskType.VULN_SCAN,
+                target_specialist=SpecialistType.RECON,
+                priority=8,
+                target_id=target_id,
+                nuclei_templates=[t.get("template_id") for t in nuclei_templates_selected[:50]]
+            )
+        
         return {
             "services_found": len(services_found),
-            "services": services_found
+            "services": services_found,
+            "ai_plan_messages": ai_plan_messages,
+            "nuclei_templates_selected": len(nuclei_templates_selected)
         }
+    
+    async def _select_nuclei_templates_for_port(
+        self,
+        port: int,
+        target_id: str,
+        service_info: tuple
+    ) -> List[Dict[str, Any]]:
+        """
+        AI-Driven Nuclei Template Selection based on port and technology fingerprint.
+        
+        This implements the intelligent template selection for the AI-to-Nuclei Logic Wiring:
+        - For ports 80/443: Select Info/Low severity templates for initial recon
+        - Use technology fingerprints to narrow down relevant templates
+        - Prioritize templates based on service detection
+        
+        Args:
+            port: The open port number
+            target_id: Target identifier
+            service_info: Tuple of (service_name, product_name)
+            
+        Returns:
+            List of selected Nuclei template dicts
+        """
+        if not self.knowledge or not self.knowledge.is_loaded():
+            self.logger.warning("Knowledge base not loaded, skipping AI template selection")
+            return []
+        
+        selected_templates = []
+        
+        # Get technology fingerprints for this port
+        tech_fingerprints = self._port_technology_map.get(port, [])
+        service_name = service_info[0].lower() if service_info else ""
+        
+        # Add service name to fingerprints
+        if service_name and service_name not in tech_fingerprints:
+            tech_fingerprints = [service_name] + tech_fingerprints
+        
+        self.logger.info(
+            f"[AI-PLAN] Technology fingerprint for port {port}: {tech_fingerprints}"
+        )
+        
+        # Query Knowledge Base for Info/Low severity templates
+        # These are ideal for initial reconnaissance without being too noisy
+        for severity in ["info", "low"]:
+            templates = self.knowledge.get_nuclei_templates_by_severity(
+                severity=severity,
+                limit=100
+            )
+            
+            # Filter templates based on technology fingerprint
+            for template in templates:
+                template_tags = [t.lower() for t in template.get("tags", [])]
+                template_name = template.get("name", "").lower()
+                template_id = template.get("template_id", "").lower()
+                
+                # Check if template matches our technology fingerprint
+                for tech in tech_fingerprints:
+                    if (
+                        tech in template_tags or
+                        tech in template_name or
+                        tech in template_id
+                    ):
+                        selected_templates.append(template)
+                        break
+        
+        # Also search for templates matching the service
+        if service_name:
+            search_results = self.knowledge.search_nuclei_templates(
+                query=service_name,
+                severity="info",
+                limit=20
+            )
+            for template in search_results:
+                if template not in selected_templates:
+                    selected_templates.append(template)
+            
+            # Also get low severity for deeper analysis
+            search_results_low = self.knowledge.search_nuclei_templates(
+                query=service_name,
+                severity="low",
+                limit=20
+            )
+            for template in search_results_low:
+                if template not in selected_templates:
+                    selected_templates.append(template)
+        
+        # Deduplicate by template_id
+        seen_ids = set()
+        unique_templates = []
+        for t in selected_templates:
+            tid = t.get("template_id")
+            if tid and tid not in seen_ids:
+                seen_ids.add(tid)
+                unique_templates.append(t)
+        
+        self.logger.info(
+            f"[AI-PLAN] Selected {len(unique_templates)} Nuclei templates for port {port}"
+        )
+        
+        return unique_templates[:50]  # Limit to 50 templates
     
     async def _execute_vuln_scan(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -584,12 +755,37 @@ class ReconSpecialist(BaseSpecialist):
         
         # Determine scan targets (for web services)
         web_targets = []
+        web_ports_found = []
         for port_str, service in target_ports.items():
             port = int(port_str)
-            if port in (80, 8080, 8000):
+            if port in (80, 8080, 8000, 3000, 5000):
                 web_targets.append(f"http://{target_ip}:{port}")
-            elif port in (443, 8443):
+                web_ports_found.append(port)
+            elif port in (443, 8443, 4443):
                 web_targets.append(f"https://{target_ip}:{port}")
+                web_ports_found.append(port)
+        
+        # ═══════════════════════════════════════════════════════════
+        # AI-PLAN: Log discovery of web ports
+        # ═══════════════════════════════════════════════════════════
+        if web_ports_found:
+            ai_plan_msg = (
+                f"[AI-PLAN] Found {len(web_ports_found)} web port(s): {web_ports_found}. "
+                f"Initiating intelligent Nuclei template selection..."
+            )
+            self.logger.info(ai_plan_msg)
+            
+            if self.blackboard and self._current_mission_id:
+                await self.blackboard.log_result(
+                    self._current_mission_id,
+                    "ai_plan",
+                    {
+                        "event": "web_ports_discovered",
+                        "ports": web_ports_found,
+                        "target_id": target_id,
+                        "message": ai_plan_msg
+                    }
+                )
         
         # If no web targets, scan the IP directly
         if not web_targets:
