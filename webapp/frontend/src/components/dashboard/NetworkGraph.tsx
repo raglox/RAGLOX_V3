@@ -1,11 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
 // RAGLOX v3.0 - NetworkGraph Component
-// Interactive network visualization with semantic clustering
+// Glassmorphic container with minimal legend
+// Inspired by Manus.im / Modern Agentic Design
 // ═══════════════════════════════════════════════════════════════
 
 import * as React from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
-import { Network } from 'lucide-react'
+import { Network, Layers } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useEventStore } from '@/stores/eventStore'
 import type { GraphNode, GraphLink } from '@/types'
 
@@ -29,26 +31,43 @@ const priorityColors: Record<string, string> = {
   low: '#10B981',
 }
 
+type FilterType = 'all' | 'critical' | 'exploited' | 'scanning'
+
 export function NetworkGraph() {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = React.useState({ width: 600, height: 400 })
+  const [filter, setFilter] = React.useState<FilterType>('all')
   
-  // Get state with stable selectors - use shallow comparison for objects
+  // Get state with stable selectors
   const graphData = useEventStore((state) => state.graphData)
   const targetCount = useEventStore((state) => state.targets.size)
   const updateGraphData = useEventStore((state) => state.updateGraphData)
   const setSelectedTarget = useEventStore((state) => state.setSelectedTarget)
   
-  // Local copy of graph data to avoid issues with react-force-graph
+  // Local copy of graph data with filtering
   const [localGraphData, setLocalGraphData] = React.useState<{ nodes: GraphNode[], links: GraphLink[] }>({ nodes: [], links: [] })
   
-  // Update local graph data when store changes
+  // Update local graph data when store changes or filter changes
   React.useEffect(() => {
+    let filteredNodes = [...graphData.nodes]
+    
+    if (filter !== 'all') {
+      filteredNodes = graphData.nodes.filter(node => {
+        if (filter === 'critical') return node.priority === 'critical'
+        if (filter === 'exploited') return node.status === 'exploited' || node.status === 'owned'
+        if (filter === 'scanning') return node.status === 'scanning' || node.status === 'exploiting'
+        return true
+      })
+    }
+    
     setLocalGraphData({
-      nodes: [...graphData.nodes],
-      links: [...graphData.links],
+      nodes: filteredNodes,
+      links: [...graphData.links].filter(link => 
+        filteredNodes.some(n => n.id === link.source) && 
+        filteredNodes.some(n => n.id === link.target)
+      ),
     })
-  }, [graphData.nodes, graphData.links])
+  }, [graphData.nodes, graphData.links, filter])
   
   // Update graph data when targets change
   React.useEffect(() => {
@@ -88,17 +107,26 @@ export function NetworkGraph() {
     ) => {
       const label = node.name || ''
       const fontSize = 10 / globalScale
-      const nodeSize = node.type === 'subnet' ? 16 : 12
+      const nodeSize = node.type === 'subnet' ? 14 : 10
       
-      // Draw node circle
-      ctx.beginPath()
-      ctx.arc(node.x || 0, node.y || 0, nodeSize, 0, 2 * Math.PI)
-      ctx.fillStyle = node.type === 'subnet'
+      // Draw node circle with subtle glow
+      const color = node.type === 'subnet'
         ? statusColors.cluster
         : statusColors[node.status as string] || statusColors.discovered
+      
+      // Glow effect
+      ctx.beginPath()
+      ctx.arc(node.x || 0, node.y || 0, nodeSize + 4, 0, 2 * Math.PI)
+      ctx.fillStyle = `${color}20`
       ctx.fill()
       
-      // Draw border for priority
+      // Main circle
+      ctx.beginPath()
+      ctx.arc(node.x || 0, node.y || 0, nodeSize, 0, 2 * Math.PI)
+      ctx.fillStyle = color
+      ctx.fill()
+      
+      // Border for priority
       if (node.priority) {
         ctx.strokeStyle = priorityColors[node.priority] || '#3B82F6'
         ctx.lineWidth = 2 / globalScale
@@ -119,7 +147,7 @@ export function NetworkGraph() {
       ctx.textAlign = 'center'
       ctx.textBaseline = 'top'
       ctx.fillStyle = '#94A3B8'
-      ctx.fillText(label, node.x || 0, (node.y || 0) + nodeSize + 2)
+      ctx.fillText(label, node.x || 0, (node.y || 0) + nodeSize + 4)
     },
     []
   )
@@ -128,66 +156,62 @@ export function NetworkGraph() {
   const linkColor = React.useCallback((link: { type?: string }) => {
     switch (link.type) {
       case 'attack_path':
-        return '#EF4444'
+        return 'rgba(239, 68, 68, 0.5)'
       case 'lateral':
-        return '#F59E0B'
+        return 'rgba(245, 158, 11, 0.5)'
       default:
-        return '#334155'
+        return 'rgba(51, 65, 85, 0.3)'
     }
   }, [])
   
+  const filters: { value: FilterType; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'critical', label: 'Critical' },
+    { value: 'exploited', label: 'Exploited' },
+    { value: 'scanning', label: 'Active' },
+  ]
+  
   return (
-    <div className="rounded-xl border-2 border-border-dark bg-bg-card-dark shadow-lg overflow-hidden">
-      {/* Card Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border-dark bg-bg-elevated-dark/30">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-royal-blue/10 border border-royal-blue/20">
-            <Network className="h-5 w-5 text-royal-blue" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-text-primary-dark">Network Map</h3>
-            <p className="text-xs text-text-muted-dark">Real-time topology visualization</p>
-          </div>
+    <div className="rounded-2xl glass border border-white/5 shadow-lg overflow-hidden">
+      {/* Minimal Header */}
+      <div className="flex items-center justify-between px-5 py-3">
+        <div className="flex items-center gap-2">
+          <Network className="h-4 w-4 text-text-muted-dark" />
+          <span className="text-sm font-medium text-text-primary-dark">Network Topology</span>
         </div>
         
-        {/* Stats Badges */}
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated-dark border border-border-dark text-xs font-medium text-text-secondary-dark">
-            <span className="w-2 h-2 rounded-full bg-royal-blue"></span>
-            {localGraphData.nodes.length} nodes
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated-dark border border-border-dark text-xs font-medium text-text-secondary-dark">
-            <span className="w-2 h-2 rounded-full bg-success"></span>
-            {targetCount} targets
-          </span>
-        </div>
-      </div>
-      
-      {/* Legend Bar */}
-      <div className="flex items-center gap-4 px-5 py-3 border-b border-border-dark/50 bg-bg-dark/30">
-        <span className="text-xs font-medium text-text-muted-dark uppercase tracking-wider">Legend:</span>
-        <div className="flex flex-wrap gap-4">
-          <LegendItem color={statusColors.discovered} label="Discovered" />
-          <LegendItem color={statusColors.scanning} label="Scanning" />
-          <LegendItem color={statusColors.scanned} label="Scanned" />
-          <LegendItem color={statusColors.exploited} label="Exploited" />
-          <LegendItem color={statusColors.cluster} label="Subnet" />
+        {/* Filter Buttons */}
+        <div className="flex items-center gap-1">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-xs font-medium transition-all',
+                filter === f.value
+                  ? 'bg-royal-blue/10 text-royal-blue'
+                  : 'text-text-muted-dark hover:text-text-primary-dark hover:bg-white/5'
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
       
       {/* Graph Container */}
-      <div className="relative h-[380px]" ref={containerRef}>
+      <div className="relative h-[340px]" ref={containerRef}>
         {localGraphData.nodes.length > 0 ? (
           <ForceGraph2D
             graphData={localGraphData}
             width={dimensions.width}
             height={dimensions.height}
-            backgroundColor="#0F172A"
+            backgroundColor="transparent"
             nodeCanvasObject={nodeCanvasObject}
             nodeCanvasObjectMode={() => 'replace'}
             linkColor={linkColor}
-            linkWidth={1.5}
-            linkDirectionalArrowLength={4}
+            linkWidth={1}
+            linkDirectionalArrowLength={3}
             linkDirectionalArrowRelPos={1}
             onNodeClick={handleNodeClick}
             cooldownTime={2000}
@@ -195,28 +219,45 @@ export function NetworkGraph() {
             d3VelocityDecay={0.3}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-text-muted-dark bg-bg-dark/50">
-            <div className="p-4 rounded-2xl bg-bg-elevated-dark/50 border border-border-dark/50 mb-4">
-              <Network className="h-12 w-12 opacity-40" />
+          <div className="flex flex-col items-center justify-center h-full text-text-muted-dark">
+            <div className="p-4 rounded-2xl bg-white/5 mb-4">
+              <Layers className="h-10 w-10 opacity-30" />
             </div>
-            <p className="text-sm font-medium">No targets discovered yet</p>
-            <p className="text-xs mt-1 text-text-muted-dark/70">Start a mission to see the network map</p>
+            <p className="text-sm font-medium">No targets discovered</p>
+            <p className="text-xs mt-1 text-text-muted-dark/70">Start a mission to visualize the network</p>
           </div>
         )}
+        
+        {/* Floating Stats Badge */}
+        {localGraphData.nodes.length > 0 && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 backdrop-blur-sm">
+            <span className="text-[10px] text-text-muted-dark">{localGraphData.nodes.length} nodes</span>
+            <span className="text-[10px] text-text-muted-dark">•</span>
+            <span className="text-[10px] text-text-muted-dark">{targetCount} targets</span>
+          </div>
+        )}
+      </div>
+      
+      {/* Inline Legend */}
+      <div className="flex items-center gap-4 px-5 py-2.5 border-t border-white/5">
+        <LegendDot color={statusColors.discovered} label="Discovered" />
+        <LegendDot color={statusColors.scanned} label="Scanned" />
+        <LegendDot color={statusColors.exploited} label="Exploited" />
+        <LegendDot color={statusColors.cluster} label="Subnet" />
       </div>
     </div>
   )
 }
 
-// Legend Item Component
-function LegendItem({ color, label }: { color: string; label: string }) {
+// Legend Dot Component - Minimal
+function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <div
-        className="h-3 w-3 rounded-full border-2 border-white/20"
+        className="h-2 w-2 rounded-full"
         style={{ backgroundColor: color }}
       />
-      <span className="text-xs font-medium text-text-secondary-dark">{label}</span>
+      <span className="text-[10px] text-text-muted-dark">{label}</span>
     </div>
   )
 }
