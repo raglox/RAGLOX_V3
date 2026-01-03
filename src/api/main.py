@@ -3,13 +3,19 @@
 # Main API entry point
 # ═══════════════════════════════════════════════════════════════
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ..core.config import get_settings
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("raglox")
 from ..core.blackboard import Blackboard
 from ..core.knowledge import EmbeddedKnowledge, init_knowledge
 from ..controller.mission import MissionController
@@ -109,6 +115,46 @@ def create_app() -> FastAPI:
 
 # Create app instance
 app = create_app()
+
+
+# ═══════════════════════════════════════════════════════════════
+# Global Exception Handler (ensures CORS headers are included)
+# ═══════════════════════════════════════════════════════════════
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Global exception handler that ensures CORS headers are included
+    in error responses. Without this, 500 errors would not include
+    CORS headers and be blocked by browsers.
+    """
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    
+    # Get CORS settings
+    settings = get_settings()
+    cors_origins = settings.cors_origins_list
+    
+    # Determine origin header to return
+    origin = request.headers.get("origin", "*")
+    if "*" not in cors_origins:
+        # If we have specific origins, only return it if it's allowed
+        if origin not in cors_origins:
+            origin = cors_origins[0] if cors_origins else "*"
+    
+    response = JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal server error: {str(exc)}",
+            "type": type(exc).__name__
+        }
+    )
+    
+    # Add CORS headers manually
+    response.headers["Access-Control-Allow-Origin"] = "*" if "*" in cors_origins else origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    return response
 
 
 @app.get("/", tags=["Root"])

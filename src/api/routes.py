@@ -639,21 +639,30 @@ async def send_chat_message(
     - **related_task_id**: Optional related task
     - **related_action_id**: Optional related approval action
     """
-    message = await controller.send_chat_message(
-        mission_id=mission_id,
-        content=request_data.content,
-        related_task_id=request_data.related_task_id,
-        related_action_id=request_data.related_action_id
-    )
-    
-    return ChatMessageResponse(
-        id=str(message.id),
-        role=message.role,
-        content=message.content,
-        timestamp=message.timestamp.isoformat(),
-        related_task_id=str(message.related_task_id) if message.related_task_id else None,
-        related_action_id=str(message.related_action_id) if message.related_action_id else None
-    )
+    try:
+        message = await controller.send_chat_message(
+            mission_id=mission_id,
+            content=request_data.content,
+            related_task_id=request_data.related_task_id,
+            related_action_id=request_data.related_action_id
+        )
+        
+        return ChatMessageResponse(
+            id=str(message.id),
+            role=message.role,
+            content=message.content,
+            timestamp=message.timestamp.isoformat(),
+            related_task_id=str(message.related_task_id) if message.related_task_id else None,
+            related_action_id=str(message.related_action_id) if message.related_action_id else None
+        )
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.error(f"Chat message error for mission {mission_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process chat message: {str(e)}"
+        )
 
 
 @router.get("/missions/{mission_id}/chat", response_model=List[ChatMessageResponse])

@@ -657,7 +657,7 @@ class MissionController:
         
         # Publish to blackboard for WebSocket broadcast
         channel = self.blackboard.get_channel(mission_id, "approvals")
-        await self.blackboard.publish_event(channel, event)
+        await self.blackboard.publish(channel, event)
         
         self.logger.info(f"⏳ Mission {mission_id} waiting for approval: {action_id}")
         
@@ -717,7 +717,7 @@ class MissionController:
         )
         
         channel = self.blackboard.get_channel(mission_id, "approvals")
-        await self.blackboard.publish_event(channel, response_event)
+        await self.blackboard.publish(channel, response_event)
         
         # Resume specialists
         await self._send_control_command(mission_id, "resume")
@@ -782,7 +782,7 @@ class MissionController:
         )
         
         channel = self.blackboard.get_channel(mission_id, "approvals")
-        await self.blackboard.publish_event(channel, response_event)
+        await self.blackboard.publish(channel, response_event)
         
         # Request AnalysisSpecialist to find alternative
         if action.task_id:
@@ -883,7 +883,7 @@ class MissionController:
         )
         
         channel = self.blackboard.get_channel(mission_id, "analysis")
-        await self.blackboard.publish_event(channel, event)
+        await self.blackboard.publish(channel, event)
         
         self.logger.info(f"Requested alternative analysis after rejection")
     
@@ -945,7 +945,7 @@ class MissionController:
         )
         
         channel = self.blackboard.get_channel(mission_id, "chat")
-        await self.blackboard.publish_event(channel, event)
+        await self.blackboard.publish(channel, event)
         
         # Process the message and generate response
         response = await self._process_chat_message(mission_id, message)
@@ -962,7 +962,7 @@ class MissionController:
                 related_task_id=response.related_task_id,
                 related_action_id=response.related_action_id
             )
-            await self.blackboard.publish_event(channel, response_event)
+            await self.blackboard.publish(channel, response_event)
         
         return message
     
