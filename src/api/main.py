@@ -30,6 +30,69 @@ controller: MissionController = None
 knowledge: EmbeddedKnowledge = None
 
 
+def init_llm_service(settings) -> None:
+    """Initialize LLM service with configured provider."""
+    try:
+        from ..core.llm import (
+            LLMService, 
+            get_llm_service, 
+            BlackboxAIProvider,
+            OpenAIProvider,
+            MockLLMProvider,
+            LLMConfig
+        )
+        from ..core.llm.base import ProviderType
+        
+        service = get_llm_service()
+        
+        # Get API key from settings
+        api_key = settings.effective_llm_api_key
+        provider_name = settings.llm_provider.lower()
+        
+        if not api_key:
+            logger.warning("No LLM API key configured - using mock provider")
+            provider_name = "mock"
+        
+        # Configure based on provider
+        if provider_name == "blackbox":
+            config = LLMConfig(
+                provider_type=ProviderType.OPENAI,  # BlackBox uses OpenAI-compatible API
+                api_key=api_key,
+                api_base="https://api.blackbox.ai",  # Base URL only, provider adds /v1/chat/completions
+                model=settings.llm_model or "blackboxai/openai/gpt-4o-mini",
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+                timeout=settings.llm_timeout,
+            )
+            provider = BlackboxAIProvider(config)
+            service.register_provider("blackbox", provider)
+            logger.info("🤖 LLM Service initialized with BlackBox AI provider")
+            
+        elif provider_name == "openai":
+            config = LLMConfig(
+                provider_type=ProviderType.OPENAI,
+                api_key=api_key,
+                api_base=settings.llm_api_base,
+                model=settings.llm_model or "gpt-4",
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+                timeout=settings.llm_timeout,
+            )
+            provider = OpenAIProvider(config)
+            service.register_provider("openai", provider)
+            logger.info("🤖 LLM Service initialized with OpenAI provider")
+            
+        else:
+            # Use mock provider for testing
+            config = LLMConfig(provider_type=ProviderType.MOCK)
+            provider = MockLLMProvider(config)
+            service.register_provider("mock", provider)
+            logger.info("🤖 LLM Service initialized with Mock provider")
+            
+    except Exception as e:
+        logger.error(f"Failed to initialize LLM service: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     """Application lifespan manager."""
@@ -46,6 +109,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         print(f"📚 Knowledge base loaded: {stats['total_rx_modules']} modules, {stats['total_techniques']} techniques")
     else:
         print("⚠️ Knowledge base not loaded - check data path")
+    
+    # Initialize LLM Service
+    if settings.llm_enabled:
+        init_llm_service(settings)
+    else:
+        logger.info("LLM service disabled in settings")
     
     # Initialize Blackboard
     blackboard = Blackboard(settings=settings)

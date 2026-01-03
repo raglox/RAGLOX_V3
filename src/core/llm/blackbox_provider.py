@@ -54,16 +54,29 @@ class BlackboxAIProvider(LLMProvider):
     AVAILABLE_MODELS = [
         "gpt-4",
         "gpt-3.5-turbo",
+        "gpt-4o",
+        "gpt-4o-mini",
         "blackboxai/openai/gpt-4",
         "blackboxai/openai/gpt-3.5-turbo",
+        "blackboxai/openai/gpt-4-turbo",
+        "blackboxai/openai/gpt-4o",
+        "blackboxai/openai/gpt-4o-mini",
+        "blackboxai/deepseek/deepseek-chat:free",
+        "blackboxai/qwen/qwen-2.5-72b-instruct",
+        "blackboxai/meta-llama/llama-3.3-70b-instruct",
     ]
     
     # Cost per 1K tokens (approximate)
     MODEL_COSTS = {
         "gpt-4": {"input": 0.03, "output": 0.06},
         "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
+        "gpt-4o": {"input": 0.005, "output": 0.015},
+        "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
         "blackboxai/openai/gpt-4": {"input": 0.03, "output": 0.06},
+        "blackboxai/openai/gpt-4-turbo": {"input": 0.01, "output": 0.03},
         "blackboxai/openai/gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
+        "blackboxai/openai/gpt-4o": {"input": 0.005, "output": 0.015},
+        "blackboxai/openai/gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
     }
     
     def __init__(self, config: LLMConfig):
@@ -237,10 +250,15 @@ class BlackboxAIProvider(LLMProvider):
         model = kwargs.get("model", self.config.model)
         
         # Map simple model names to BlackboxAI format if needed
-        if model == "gpt-4" and "blackboxai" not in model:
-            model = "blackboxai/openai/gpt-4"
-        elif model == "gpt-3.5-turbo" and "blackboxai" not in model:
-            model = "blackboxai/openai/gpt-3.5-turbo"
+        if "blackboxai/" not in model:
+            if model == "gpt-4":
+                model = "blackboxai/openai/gpt-4-turbo"
+            elif model == "gpt-3.5-turbo":
+                model = "blackboxai/openai/gpt-3.5-turbo"
+            elif model == "gpt-4o":
+                model = "blackboxai/openai/gpt-4o"
+            elif model == "gpt-4o-mini":
+                model = "blackboxai/openai/gpt-4o-mini"
         
         request = {
             "model": model,
@@ -265,7 +283,7 @@ class BlackboxAIProvider(LLMProvider):
             try:
                 client = await self._get_client()
                 response = await client.post(
-                    "/chat/completions",
+                    "/v1/chat/completions",
                     json=request_data,
                 )
                 

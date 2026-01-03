@@ -1033,13 +1033,12 @@ class MissionController:
         """
         Process a chat message and generate a system response.
         
-        This is where we can integrate LLM for intelligent responses.
+        Uses LLM for intelligent responses with fallback to simple commands.
         """
         content = message.content.lower()
-        
-        # Simple command parsing
         response_content = None
         
+        # Check for simple commands first (fast path)
         if "status" in content:
             status = await self.get_mission_status(mission_id)
             if status:
@@ -1075,14 +1074,13 @@ class MissionController:
                 "  - 'pause': Pause the mission\n"
                 "  - 'resume': Resume the mission\n"
                 "  - 'pending': List pending approvals\n"
-                "  - 'help': Show this help message"
+                "  - 'help': Show this help message\n"
+                "\nYou can also ask me anything about the mission!"
             )
         
         else:
-            response_content = (
-                f"🤖 Received your message. "
-                f"Use 'help' to see available commands."
-            )
+            # Use LLM for general questions
+            response_content = await self._get_llm_response(mission_id, message.content)
         
         if response_content:
             return ChatMessage(
@@ -1094,6 +1092,73 @@ class MissionController:
             )
         
         return None
+    
+    async def _get_llm_response(self, mission_id: str, user_message: str) -> str:
+        """
+        Get LLM response for a chat message.
+        
+        Args:
+            mission_id: Mission ID
+            user_message: User's message
+            
+        Returns:
+            LLM response or fallback message
+        """
+        try:
+            from ..core.llm.service import get_llm_service
+            from ..core.llm.base import LLMMessage, MessageRole
+            
+            llm_service = get_llm_service()
+            
+            if not llm_service or not llm_service.providers:
+                self.logger.warning("LLM service not available, using fallback")
+                return f"🤖 Received your message: '{user_message}'. Use 'help' to see available commands."
+            
+            # Get mission context
+            status = await self.get_mission_status(mission_id)
+            mission_context = ""
+            if status:
+                mission_context = f"""
+Current Mission Status:
+- Name: {status.get('name', 'Unknown')}
+- Status: {status.get('status', 'unknown')}
+- Targets: {status.get('target_count', 0)}
+- Vulnerabilities: {status.get('vuln_count', 0)}
+- Goals: {status.get('statistics', {}).get('goals_achieved', 0)}/{len(status.get('goals', {}))}
+"""
+            
+            # Build messages
+            system_prompt = f"""You are RAGLOX, an AI-powered Red Team Automation assistant.
+You help operators manage and monitor penetration testing missions.
+
+{mission_context}
+
+Be concise, professional, and helpful. If asked about something outside your scope,
+politely redirect the user to relevant commands.
+
+Available commands the user can use:
+- 'status': Get mission status
+- 'pause': Pause the mission
+- 'resume': Resume the mission
+- 'pending': List pending approvals
+- 'help': Show help message"""
+
+            messages = [
+                LLMMessage(role=MessageRole.SYSTEM, content=system_prompt),
+                LLMMessage(role=MessageRole.USER, content=user_message)
+            ]
+            
+            # Get response from LLM
+            response = await llm_service.generate(messages)
+            
+            if response and response.content:
+                return f"🤖 {response.content}"
+            else:
+                return f"🤖 Received your message. Use 'help' to see available commands."
+                
+        except Exception as e:
+            self.logger.error(f"LLM error: {e}")
+            return f"🤖 Received your message: '{user_message}'. Use 'help' to see available commands."
     
     async def shutdown(self) -> None:
         """Shutdown the controller gracefully."""
