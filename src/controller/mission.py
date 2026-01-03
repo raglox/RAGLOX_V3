@@ -294,6 +294,8 @@ class MissionController:
         """
         Get comprehensive mission status.
         
+        First tries to get mission from Redis, then falls back to local cache.
+        
         Args:
             mission_id: Mission ID
             
@@ -301,7 +303,40 @@ class MissionController:
             Status dictionary
         """
         mission_data = await self.blackboard.get_mission(mission_id)
+        
+        # If not in Redis, check local cache (for in-memory missions)
         if not mission_data:
+            if mission_id in self._active_missions:
+                local_mission = self._active_missions[mission_id]
+                mission = local_mission.get("mission")
+                if mission:
+                    # Reconstruct from local cache
+                    goals_dict = {}
+                    if hasattr(mission, 'goals'):
+                        goals_dict = {
+                            k: v.value if hasattr(v, 'value') else str(v) 
+                            for k, v in mission.goals.items()
+                        }
+                    
+                    return {
+                        "mission_id": mission_id,
+                        "name": getattr(mission, 'name', 'Unknown'),
+                        "status": local_mission.get("status", MissionStatus.CREATED).value if hasattr(local_mission.get("status"), 'value') else str(local_mission.get("status", "unknown")),
+                        "scope": getattr(mission, 'scope', []),
+                        "goals": goals_dict,
+                        "statistics": {
+                            "targets_discovered": 0,
+                            "vulns_found": 0,
+                            "creds_harvested": 0,
+                            "sessions_established": 0,
+                            "goals_achieved": 0
+                        },
+                        "target_count": 0,
+                        "vuln_count": 0,
+                        "created_at": local_mission.get("created_at", datetime.utcnow()).isoformat() if hasattr(local_mission.get("created_at"), 'isoformat') else str(local_mission.get("created_at")),
+                        "started_at": None,
+                        "completed_at": None
+                    }
             return None
         
         # Get statistics
