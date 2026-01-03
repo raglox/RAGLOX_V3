@@ -89,6 +89,31 @@ class VulnerabilityResponse(BaseModel):
     exploit_available: bool = False
 
 
+class CredentialResponse(BaseModel):
+    """Credential response model."""
+    cred_id: str
+    target_id: str
+    type: str
+    username: str
+    domain: Optional[str] = None
+    privilege_level: str
+    source: Optional[str] = None
+    verified: bool = False
+    created_at: Optional[str] = None
+
+
+class SessionResponse(BaseModel):
+    """Session response model."""
+    session_id: str
+    target_id: str
+    type: str
+    user: str
+    privilege: str
+    status: str
+    established_at: Optional[str] = None
+    last_activity: Optional[str] = None
+
+
 # ═══════════════════════════════════════════════════════════════
 # HITL Request/Response Models
 # ═══════════════════════════════════════════════════════════════
@@ -394,6 +419,79 @@ async def list_vulnerabilities(
 # Statistics Endpoint
 # ═══════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+# Credential Endpoints
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/missions/{mission_id}/credentials", response_model=List[CredentialResponse])
+async def list_credentials(
+    mission_id: str,
+    controller: MissionController = Depends(get_controller)
+) -> List[CredentialResponse]:
+    """List all credentials for a mission."""
+    blackboard = controller.blackboard
+    
+    cred_keys = await blackboard.get_mission_creds(mission_id)
+    creds = []
+    
+    for cred_key in cred_keys:
+        cred_id = cred_key.replace("cred:", "")
+        cred_data = await blackboard.get_credential(cred_id)
+        
+        if cred_data:
+            creds.append(CredentialResponse(
+                cred_id=cred_id,
+                target_id=str(cred_data.get("target_id", "")),
+                type=cred_data.get("type", ""),
+                username=cred_data.get("username", ""),
+                domain=cred_data.get("domain"),
+                privilege_level=cred_data.get("privilege_level", "user"),
+                source=cred_data.get("source"),
+                verified=cred_data.get("verified", "false").lower() == "true",
+                created_at=cred_data.get("created_at")
+            ))
+    
+    return creds
+
+
+# ═══════════════════════════════════════════════════════════════
+# Session Endpoints
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/missions/{mission_id}/sessions", response_model=List[SessionResponse])
+async def list_sessions(
+    mission_id: str,
+    controller: MissionController = Depends(get_controller)
+) -> List[SessionResponse]:
+    """List all active sessions for a mission."""
+    blackboard = controller.blackboard
+    
+    session_keys = await blackboard.get_mission_sessions(mission_id)
+    sessions = []
+    
+    for session_key in session_keys:
+        session_id = session_key.replace("session:", "")
+        session_data = await blackboard.get_session(session_id)
+        
+        if session_data:
+            sessions.append(SessionResponse(
+                session_id=session_id,
+                target_id=str(session_data.get("target_id", "")),
+                type=session_data.get("type", "shell"),
+                user=session_data.get("user", "unknown"),
+                privilege=session_data.get("privilege", "user"),
+                status=session_data.get("status", "unknown"),
+                established_at=session_data.get("established_at"),
+                last_activity=session_data.get("last_activity")
+            ))
+    
+    return sessions
+
+
+# ═══════════════════════════════════════════════════════════════
+# Statistics Endpoint
+# ═══════════════════════════════════════════════════════════════
+
 @router.get("/missions/{mission_id}/stats")
 async def get_mission_stats(
     mission_id: str,
@@ -541,21 +639,30 @@ async def send_chat_message(
     - **related_task_id**: Optional related task
     - **related_action_id**: Optional related approval action
     """
-    message = await controller.send_chat_message(
-        mission_id=mission_id,
-        content=request_data.content,
-        related_task_id=request_data.related_task_id,
-        related_action_id=request_data.related_action_id
-    )
-    
-    return ChatMessageResponse(
-        id=str(message.id),
-        role=message.role,
-        content=message.content,
-        timestamp=message.timestamp.isoformat(),
-        related_task_id=str(message.related_task_id) if message.related_task_id else None,
-        related_action_id=str(message.related_action_id) if message.related_action_id else None
-    )
+    try:
+        message = await controller.send_chat_message(
+            mission_id=mission_id,
+            content=request_data.content,
+            related_task_id=request_data.related_task_id,
+            related_action_id=request_data.related_action_id
+        )
+        
+        return ChatMessageResponse(
+            id=str(message.id),
+            role=message.role,
+            content=message.content,
+            timestamp=message.timestamp.isoformat(),
+            related_task_id=str(message.related_task_id) if message.related_task_id else None,
+            related_action_id=str(message.related_action_id) if message.related_action_id else None
+        )
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logging.error(f"Chat message error for mission {mission_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process chat message: {str(e)}"
+        )
 
 
 @router.get("/missions/{mission_id}/chat", response_model=List[ChatMessageResponse])

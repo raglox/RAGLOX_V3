@@ -2,6 +2,7 @@
 # RAGLOX v3.0 - Analysis Specialist
 # Reflexion Logic specialist for failure analysis and adaptive learning
 # With LLM Integration for intelligent decision making
+# Enhanced with Operational Memory for adaptive learning
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -22,7 +23,15 @@ from ..core.models import (
 )
 from ..core.blackboard import Blackboard
 from ..core.config import Settings, get_settings
-from ..core.knowledge import EmbeddedKnowledge
+from ..core.knowledge import EmbeddedKnowledge, NucleiTemplate
+
+# Hybrid Intelligence Layer imports
+from ..core.operational_memory import (
+    OperationalMemory,
+    DecisionRecord,
+    DecisionOutcome,
+    OperationalContext,
+)
 
 # LLM imports
 if TYPE_CHECKING:
@@ -162,6 +171,7 @@ class AnalysisSpecialist(BaseSpecialist):
         knowledge: Optional[EmbeddedKnowledge] = None,
         llm_enabled: Optional[bool] = None,
         llm_service: Optional["LLMService"] = None,
+        operational_memory: Optional[OperationalMemory] = None,
     ):
         super().__init__(
             specialist_type=SpecialistType.ANALYSIS,
@@ -179,7 +189,15 @@ class AnalysisSpecialist(BaseSpecialist):
         self._llm_service = llm_service
         self._llm_initialized = False
         
-        # Analysis history for learning
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Operational Memory Integration
+        # ═══════════════════════════════════════════════════════════
+        self._operational_memory = operational_memory or OperationalMemory(
+            blackboard=blackboard,
+            logger=self.logger
+        )
+        
+        # Analysis history for learning (local cache, syncs with OperationalMemory)
         self._analysis_history: List[Dict[str, Any]] = []
         
         # Currently no specific task types - analysis works on events
@@ -196,6 +214,10 @@ class AnalysisSpecialist(BaseSpecialist):
             "llm_failures": 0,
             "rule_based_fallbacks": 0,
             "safety_limit_breaches": 0,
+            # New: Memory-assisted stats
+            "memory_consultations": 0,
+            "memory_guided_decisions": 0,
+            "historical_insights_applied": 0,
         }
         
         # Safety limits tracking (per mission)
@@ -204,6 +226,8 @@ class AnalysisSpecialist(BaseSpecialist):
         self._mission_estimated_cost = 0.0
         self._daily_llm_requests = 0
         self._daily_reset_date = datetime.utcnow().date()
+        
+        self.logger.info("AnalysisSpecialist initialized with Operational Memory integration")
     
     def _check_safety_limits(self) -> tuple[bool, str]:
         """
@@ -420,6 +444,7 @@ class AnalysisSpecialist(BaseSpecialist):
         Analyze a failed task and determine next steps.
         
         This is the core Reflexion Logic implementation.
+        Enhanced with Operational Memory for adaptive learning.
         
         Args:
             task_id: ID of the failed task
@@ -455,6 +480,19 @@ class AnalysisSpecialist(BaseSpecialist):
         # Gather context for decision
         context = await self._gather_analysis_context(original_task, error_context)
         
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Consult Operational Memory
+        # ═══════════════════════════════════════════════════════════
+        historical_insight = await self._get_historical_insight(
+            original_task, error_context, context
+        )
+        if historical_insight:
+            context["historical_insight"] = historical_insight
+            self._stats["memory_consultations"] += 1
+        
+        # Record decision start time for tracking
+        decision_start_time = datetime.utcnow()
+        
         # Make decision
         decision = await self._make_decision(
             original_task=original_task,
@@ -467,20 +505,266 @@ class AnalysisSpecialist(BaseSpecialist):
             max_retries=max_retries
         )
         
-        # Record analysis
+        # Calculate decision duration
+        decision_duration_ms = int((datetime.utcnow() - decision_start_time).total_seconds() * 1000)
+        
+        # Record analysis in local history
         analysis_record = {
             "task_id": task_id,
             "error_type": error_type,
             "category": category,
             "decision": decision["decision"],
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "used_historical_insight": historical_insight is not None,
+            "duration_ms": decision_duration_ms,
         }
         self._analysis_history.append(analysis_record)
+        
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Record Decision in Operational Memory
+        # ═══════════════════════════════════════════════════════════
+        await self._record_decision_to_memory(
+            original_task, error_context, context, decision, decision_duration_ms
+        )
         
         # Publish analysis result event
         await self._publish_analysis_result(task_id, original_task, decision)
         
         return decision
+    
+    # ═══════════════════════════════════════════════════════════
+    # Hybrid Intelligence: Operational Memory Integration Methods
+    # ═══════════════════════════════════════════════════════════
+    
+    async def _get_historical_insight(
+        self,
+        task: Dict[str, Any],
+        error_context: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Query Operational Memory for historical insights.
+        
+        This is the key to adaptive learning - we learn from past failures!
+        
+        Args:
+            task: The original failed task
+            error_context: Error context from the failure
+            context: Gathered analysis context
+            
+        Returns:
+            Historical insight dict or None if no relevant data
+        """
+        if not self._operational_memory:
+            return None
+        
+        try:
+            # Determine context type
+            task_type = task.get("type", "").lower()
+            if "exploit" in task_type:
+                op_context = OperationalContext.EXPLOIT
+            elif "privesc" in task_type:
+                op_context = OperationalContext.PRIVESC
+            elif "lateral" in task_type:
+                op_context = OperationalContext.LATERAL
+            elif "cred" in task_type:
+                op_context = OperationalContext.CRED_HARVEST
+            else:
+                op_context = OperationalContext.ANALYSIS
+            
+            # Get target OS from context
+            target_info = context.get("target_info") or {}
+            target_os = target_info.get("os")
+            
+            # Get vulnerability type from context
+            vuln_info = context.get("vuln_info") or {}
+            vuln_type = vuln_info.get("type") or error_context.get("technique_id")
+            
+            # Search for similar experiences
+            experiences = await self._operational_memory.get_similar_experiences(
+                context=op_context,
+                target_os=target_os,
+                vuln_type=vuln_type,
+                limit=10
+            )
+            
+            if not experiences:
+                self.logger.debug("No historical experiences found for this context")
+                return None
+            
+            # Get best approach recommendation
+            best_approach = await self._operational_memory.get_best_approach_for_context(
+                context=op_context,
+                target_os=target_os,
+                vuln_type=vuln_type,
+                available_modules=[m.get("rx_module_id") for m in context.get("alternative_modules", [])]
+            )
+            
+            # Get success rate
+            success_rate, sample_count = await self._operational_memory.get_success_rate_for_context(
+                context=op_context,
+                target_os=target_os,
+                vuln_type=vuln_type
+            )
+            
+            insight = {
+                "experiences_found": len(experiences),
+                "success_rate": success_rate,
+                "sample_count": sample_count,
+                "best_approach": best_approach,
+                "common_failure_factors": self._extract_common_failures(experiences),
+                "recommended_modifications": self._extract_successful_modifications(experiences),
+            }
+            
+            self.logger.info(
+                f"Historical insight found: {len(experiences)} experiences, "
+                f"success rate: {success_rate:.1%} (n={sample_count})"
+            )
+            
+            return insight
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to get historical insight: {e}")
+            return None
+    
+    def _extract_common_failures(self, experiences: List[DecisionRecord]) -> List[str]:
+        """Extract common failure factors from experiences."""
+        from collections import Counter
+        
+        all_factors = []
+        for exp in experiences:
+            if exp.outcome == DecisionOutcome.FAILURE:
+                all_factors.extend(exp.failure_factors)
+        
+        if not all_factors:
+            return []
+        
+        # Return top 5 most common
+        counter = Counter(all_factors)
+        return [factor for factor, _ in counter.most_common(5)]
+    
+    def _extract_successful_modifications(
+        self,
+        experiences: List[DecisionRecord]
+    ) -> List[Dict[str, Any]]:
+        """Extract successful modifications from past experiences."""
+        modifications = []
+        
+        for exp in experiences:
+            if exp.outcome == DecisionOutcome.SUCCESS and exp.decision_type == "modify_approach":
+                modifications.append({
+                    "parameters": exp.parameters_used,
+                    "success_factors": exp.success_factors,
+                    "module": exp.parameters_used.get("module"),
+                })
+        
+        return modifications[:5]  # Top 5
+    
+    async def _record_decision_to_memory(
+        self,
+        original_task: Dict[str, Any],
+        error_context: Dict[str, Any],
+        context: Dict[str, Any],
+        decision: Dict[str, Any],
+        duration_ms: int
+    ) -> None:
+        """
+        Record the analysis decision in Operational Memory.
+        
+        This enables future learning from this decision!
+        """
+        if not self._operational_memory:
+            return
+        
+        try:
+            # Determine context type
+            task_type = original_task.get("type", "").lower()
+            if "exploit" in task_type:
+                op_context = OperationalContext.EXPLOIT
+            elif "privesc" in task_type:
+                op_context = OperationalContext.PRIVESC
+            elif "lateral" in task_type:
+                op_context = OperationalContext.LATERAL
+            elif "cred" in task_type:
+                op_context = OperationalContext.CRED_HARVEST
+            else:
+                op_context = OperationalContext.ANALYSIS
+            
+            # Get mission ID
+            mission_id = None
+            if self._current_mission_id:
+                try:
+                    mission_id = UUID(self._current_mission_id)
+                except (ValueError, TypeError):
+                    pass
+            
+            # Prepare target and vuln info
+            target_info = context.get("target_info")
+            vuln_info = context.get("vuln_info")
+            
+            # Build parameters
+            parameters = {
+                "decision": decision.get("decision"),
+                "error_category": self._categorize_error(error_context.get("error_type", "unknown")),
+                "module": decision.get("new_module") or original_task.get("rx_module"),
+                **decision.get("modified_parameters", {})
+            }
+            
+            # Record the decision
+            decision_id = await self._operational_memory.record_decision(
+                mission_id=mission_id,
+                context=op_context,
+                decision_type=decision.get("decision", "unknown"),
+                decision_source="llm" if decision.get("llm_analysis") else "rules",
+                parameters=parameters,
+                target_info=target_info,
+                vuln_info=vuln_info
+            )
+            
+            # Note: The outcome will be updated when we get feedback
+            # For now, we mark it as pending (default is FAILURE, will be updated)
+            
+            self.logger.debug(f"Recorded decision {decision_id} to Operational Memory")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to record decision to memory: {e}")
+    
+    async def update_decision_outcome(
+        self,
+        decision_id: UUID,
+        success: bool,
+        details: Dict[str, Any],
+        lessons: Optional[List[str]] = None
+    ) -> None:
+        """
+        Update the outcome of a previously recorded decision.
+        
+        Call this when we know if the decision led to success or failure.
+        This completes the learning loop!
+        
+        Args:
+            decision_id: ID of the decision to update
+            success: Whether the decision led to success
+            details: Additional details about the outcome
+            lessons: Lessons learned from this experience
+        """
+        if not self._operational_memory:
+            return
+        
+        try:
+            outcome = DecisionOutcome.SUCCESS if success else DecisionOutcome.FAILURE
+            
+            await self._operational_memory.update_outcome(
+                decision_id=decision_id,
+                outcome=outcome,
+                details=details,
+                lessons=lessons
+            )
+            
+            self.logger.info(f"Updated decision {decision_id} outcome: {outcome.value}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to update decision outcome: {e}")
     
     def _categorize_error(self, error_type: str) -> str:
         """Categorize an error type into a broader category."""
@@ -546,8 +830,239 @@ class AnalysisSpecialist(BaseSpecialist):
                 context["alternative_techniques"] = [
                     m.get("technique_id") for m in evasion_modules if m.get("technique_id")
                 ]
+            
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Query Nuclei CVE API for alternative exploitation paths
+            # If vulnerability is High severity and exploit failed, search for
+            # related Nuclei templates that might provide alternative approaches
+            # ═══════════════════════════════════════════════════════════
+            vuln_info = context.get("vuln_info")
+            if vuln_info:
+                vuln_severity = vuln_info.get("severity", "").lower()
+                vuln_type = vuln_info.get("type", "")
+                cve_id = vuln_info.get("cve_id") or vuln_type  # Use CVE ID or vuln type
+                
+                # Search for alternative Nuclei templates if High severity exploit failed
+                if vuln_severity in ["high", "critical"]:
+                    nuclei_alternatives = await self._search_nuclei_alternatives(
+                        cve_id=cve_id,
+                        vuln_type=vuln_type,
+                        error_context=error_context
+                    )
+                    context["nuclei_alternatives"] = nuclei_alternatives
         
         return context
+    
+    async def _search_nuclei_alternatives(
+        self,
+        cve_id: str,
+        vuln_type: str,
+        error_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        AI-Driven Nuclei Template Search for Alternative Exploitation Paths.
+        
+        When a High severity vulnerability exploit fails, this method searches
+        the Nuclei Knowledge Base for alternative approaches:
+        
+        1. First, try to find the exact CVE in Nuclei templates
+        2. If found, look for related templates (same technology/protocol)
+        3. Extract alternative exploitation techniques from template info
+        
+        This implements the AI-to-Nuclei Logic Wiring for failed exploit analysis.
+        
+        Args:
+            cve_id: CVE ID or vulnerability identifier
+            vuln_type: Vulnerability type/name
+            error_context: Context from the failed task
+            
+        Returns:
+            Dict containing alternative approaches from Nuclei knowledge base
+        """
+        if not self.knowledge or not self.knowledge.is_loaded():
+            return {"available": False, "reason": "Knowledge base not loaded"}
+        
+        alternatives = {
+            "available": True,
+            "cve_template": None,
+            "related_templates": [],
+            "alternative_approaches": [],
+            "ai_plan_messages": []
+        }
+        
+        # Step 1: Try to find exact CVE template
+        if cve_id and cve_id.upper().startswith("CVE-"):
+            ai_plan_msg = (
+                f"[AI-PLAN] Exploit failed for {cve_id}. "
+                f"Searching Nuclei Knowledge Base for alternative approaches..."
+            )
+            alternatives["ai_plan_messages"].append(ai_plan_msg)
+            self.logger.info(ai_plan_msg)
+            
+            cve_template = self.knowledge.get_nuclei_template_by_cve(cve_id)
+            if cve_template:
+                alternatives["cve_template"] = cve_template
+                
+                # Extract tags and references for finding related templates
+                template_tags = cve_template.get("tags", [])
+                template_protocol = cve_template.get("protocol", [])
+                
+                ai_plan_msg = (
+                    f"[AI-PLAN] Found Nuclei template for {cve_id}: "
+                    f"{cve_template.get('name')}. Tags: {template_tags[:5]}..."
+                )
+                alternatives["ai_plan_messages"].append(ai_plan_msg)
+                self.logger.info(ai_plan_msg)
+                
+                # Step 2: Search for related templates by tags
+                for tag in template_tags[:3]:  # Top 3 tags
+                    related = self.knowledge.get_nuclei_templates_by_tag(
+                        tag=tag,
+                        limit=10
+                    )
+                    for rt in related:
+                        if rt.get("template_id") != cve_template.get("template_id"):
+                            if rt not in alternatives["related_templates"]:
+                                alternatives["related_templates"].append(rt)
+                
+                # Step 3: Generate alternative approaches
+                alternatives["alternative_approaches"] = self._generate_alternative_approaches(
+                    cve_template=cve_template,
+                    related_templates=alternatives["related_templates"],
+                    error_context=error_context
+                )
+        
+        # If no CVE template found, search by vuln type
+        if not alternatives["cve_template"] and vuln_type:
+            ai_plan_msg = (
+                f"[AI-PLAN] No direct CVE template found. "
+                f"Searching by vulnerability type: {vuln_type}..."
+            )
+            alternatives["ai_plan_messages"].append(ai_plan_msg)
+            self.logger.info(ai_plan_msg)
+            
+            # Search Nuclei templates by vulnerability type
+            search_results = self.knowledge.search_nuclei_templates(
+                query=vuln_type,
+                limit=20
+            )
+            
+            if search_results:
+                alternatives["related_templates"] = search_results
+                ai_plan_msg = (
+                    f"[AI-PLAN] Found {len(search_results)} related Nuclei templates "
+                    f"for vulnerability type: {vuln_type}"
+                )
+                alternatives["ai_plan_messages"].append(ai_plan_msg)
+                self.logger.info(ai_plan_msg)
+                
+                # Generate approaches from search results
+                alternatives["alternative_approaches"] = self._generate_alternative_approaches(
+                    cve_template=None,
+                    related_templates=search_results,
+                    error_context=error_context
+                )
+        
+        # Log to Blackboard for Execution Stream visibility
+        if self.blackboard and self._current_mission_id:
+            await self.blackboard.log_result(
+                self._current_mission_id,
+                "ai_plan",
+                {
+                    "event": "nuclei_alternative_search",
+                    "cve_id": cve_id,
+                    "vuln_type": vuln_type,
+                    "found_cve_template": alternatives["cve_template"] is not None,
+                    "related_templates_count": len(alternatives["related_templates"]),
+                    "alternative_approaches_count": len(alternatives["alternative_approaches"]),
+                    "messages": alternatives["ai_plan_messages"]
+                }
+            )
+        
+        return alternatives
+    
+    def _generate_alternative_approaches(
+        self,
+        cve_template: Optional[Dict[str, Any]],
+        related_templates: List[Dict[str, Any]],
+        error_context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate alternative exploitation approaches based on Nuclei templates.
+        
+        Analyzes the templates to suggest different attack vectors,
+        evasion techniques, or alternative exploitation paths.
+        
+        Args:
+            cve_template: Direct CVE template if found
+            related_templates: Related templates from search
+            error_context: Original error context
+            
+        Returns:
+            List of alternative approach suggestions
+        """
+        approaches = []
+        error_type = error_context.get("error_type", "unknown").lower()
+        
+        # Approach 1: If defense detected, suggest templates with evasion
+        if "defense" in error_type or "blocked" in error_type:
+            evasion_templates = [
+                t for t in related_templates
+                if any(tag in ["evasion", "bypass", "waf-bypass"] 
+                       for tag in t.get("tags", []))
+            ]
+            if evasion_templates:
+                approaches.append({
+                    "type": "evasion",
+                    "description": "Defense detected. Try templates with evasion capabilities.",
+                    "suggested_templates": [t.get("template_id") for t in evasion_templates[:5]],
+                    "reasoning": "These templates include WAF bypass or evasion techniques."
+                })
+        
+        # Approach 2: Try different protocols/methods
+        if cve_template:
+            template_protocol = cve_template.get("protocol", [])
+            alt_protocol_templates = [
+                t for t in related_templates
+                if t.get("protocol") and t.get("protocol") != template_protocol
+            ]
+            if alt_protocol_templates:
+                approaches.append({
+                    "type": "protocol_switch",
+                    "description": f"Try alternative protocol. Original: {template_protocol}",
+                    "suggested_templates": [t.get("template_id") for t in alt_protocol_templates[:5]],
+                    "reasoning": "Different protocols may bypass current defenses."
+                })
+        
+        # Approach 3: Look for exploit chain templates
+        chain_templates = [
+            t for t in related_templates
+            if any(tag in ["chain", "multi-step", "exploit-chain"] 
+                   for tag in t.get("tags", []))
+        ]
+        if chain_templates:
+            approaches.append({
+                "type": "exploit_chain",
+                "description": "Consider multi-step exploitation.",
+                "suggested_templates": [t.get("template_id") for t in chain_templates[:5]],
+                "reasoning": "Chained exploits may succeed where single exploits fail."
+            })
+        
+        # Approach 4: Lower severity reconnaissance
+        if not approaches:
+            info_templates = [
+                t for t in related_templates
+                if t.get("severity", "").lower() in ["info", "low"]
+            ]
+            if info_templates:
+                approaches.append({
+                    "type": "reconnaissance",
+                    "description": "Gather more information before retrying exploit.",
+                    "suggested_templates": [t.get("template_id") for t in info_templates[:5]],
+                    "reasoning": "Additional recon may reveal better attack vectors."
+                })
+        
+        return approaches
     
     def _get_target_platform(self, target_info: Optional[Dict[str, Any]]) -> Optional[str]:
         """Extract platform from target info."""
@@ -594,6 +1109,19 @@ class AnalysisSpecialist(BaseSpecialist):
                 original_task, context, risk_reason, risk_level
             )
         
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Apply Historical Insight First
+        # ═══════════════════════════════════════════════════════════
+        historical_insight = context.get("historical_insight")
+        if historical_insight:
+            memory_decision = self._apply_historical_insight(
+                historical_insight, category, strategy, context
+            )
+            if memory_decision:
+                self._stats["memory_guided_decisions"] += 1
+                self._stats["historical_insights_applied"] += 1
+                return memory_decision
+        
         # Check if LLM analysis is available and needed
         if self.llm_enabled and self._needs_llm_analysis(category, context):
             return await self._llm_decision(
@@ -605,7 +1133,40 @@ class AnalysisSpecialist(BaseSpecialist):
         
         # Defense detected - try alternatives or skip
         if category == "defense":
-            if context["alternative_modules"]:
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Check Nuclei alternatives for High severity vulns
+            # ═══════════════════════════════════════════════════════════
+            nuclei_alts = context.get("nuclei_alternatives", {})
+            if nuclei_alts.get("alternative_approaches"):
+                best_approach = nuclei_alts["alternative_approaches"][0]
+                self._stats["modifications_recommended"] += 1
+                
+                ai_plan_msg = (
+                    f"[AI-PLAN] Defense blocked exploit. Found Nuclei alternative: "
+                    f"{best_approach.get('type')} - {best_approach.get('description')}"
+                )
+                self.logger.info(ai_plan_msg)
+                
+                return {
+                    "decision": "modify_approach",
+                    "reasoning": (
+                        f"Defense detected ({detected_defenses}). "
+                        f"AI-PLAN suggests: {best_approach.get('description')}"
+                    ),
+                    "nuclei_approach": best_approach,
+                    "nuclei_templates": best_approach.get("suggested_templates", []),
+                    "modified_parameters": {
+                        "use_evasion": True,
+                        "encode_payload": True,
+                        "nuclei_guided": True
+                    },
+                    "recommendations": [
+                        best_approach.get("reasoning"),
+                        *strategy["recommendations"]
+                    ],
+                    "ai_plan_messages": nuclei_alts.get("ai_plan_messages", [])
+                }
+            elif context["alternative_modules"]:
                 self._stats["modifications_recommended"] += 1
                 return {
                     "decision": "modify_approach",
@@ -625,8 +1186,46 @@ class AnalysisSpecialist(BaseSpecialist):
                     "recommendations": strategy["recommendations"]
                 }
         
-        # Vulnerability patched - skip
+        # Vulnerability patched - check Nuclei for reconnaissance or skip
         if category == "vulnerability":
+            # ═══════════════════════════════════════════════════════════
+            # AI-PLAN: Before skipping, check if Nuclei suggests recon
+            # ═══════════════════════════════════════════════════════════
+            nuclei_alts = context.get("nuclei_alternatives", {})
+            recon_approaches = [
+                a for a in nuclei_alts.get("alternative_approaches", [])
+                if a.get("type") == "reconnaissance"
+            ]
+            
+            if recon_approaches:
+                recon_approach = recon_approaches[0]
+                ai_plan_msg = (
+                    f"[AI-PLAN] Vulnerability appears patched. "
+                    f"Suggesting additional reconnaissance via Nuclei templates."
+                )
+                self.logger.info(ai_plan_msg)
+                
+                self._stats["modifications_recommended"] += 1
+                return {
+                    "decision": "modify_approach",
+                    "reasoning": (
+                        "Target may be patched. AI-PLAN suggests gathering more "
+                        "information before giving up."
+                    ),
+                    "nuclei_approach": recon_approach,
+                    "nuclei_templates": recon_approach.get("suggested_templates", []),
+                    "modified_parameters": {
+                        "perform_recon": True,
+                        "nuclei_guided": True
+                    },
+                    "recommendations": [
+                        recon_approach.get("reasoning"),
+                        "Run additional Nuclei scans before skipping this target",
+                        *strategy["recommendations"]
+                    ],
+                    "ai_plan_messages": nuclei_alts.get("ai_plan_messages", [])
+                }
+            
             self._stats["skips_recommended"] += 1
             return {
                 "decision": "skip",
@@ -695,6 +1294,14 @@ class AnalysisSpecialist(BaseSpecialist):
     
     def _needs_llm_analysis(self, category: str, context: Dict[str, Any]) -> bool:
         """Determine if this failure needs LLM analysis."""
+        # If we have good historical insight with high confidence, skip LLM
+        historical_insight = context.get("historical_insight")
+        if historical_insight:
+            best_approach = historical_insight.get("best_approach", {})
+            if best_approach.get("confidence") == "high":
+                self.logger.debug("High-confidence historical insight available, skipping LLM")
+                return False
+        
         # Complex defense scenarios benefit from LLM reasoning
         if category == "defense" and len(context.get("detected_defenses", [])) > 1:
             return True
@@ -704,6 +1311,108 @@ class AnalysisSpecialist(BaseSpecialist):
             return True
         
         return False
+    
+    def _apply_historical_insight(
+        self,
+        insight: Dict[str, Any],
+        category: str,
+        strategy: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Apply historical insight to make a decision.
+        
+        This is where we actually USE the memory to guide decisions!
+        
+        Args:
+            insight: Historical insight from Operational Memory
+            category: Error category
+            strategy: Retry strategy for this category
+            context: Full analysis context
+            
+        Returns:
+            Decision dict if insight is actionable, None otherwise
+        """
+        best_approach = insight.get("best_approach")
+        if not best_approach:
+            return None
+        
+        confidence = best_approach.get("confidence", "low")
+        success_rate = insight.get("success_rate", 0.5)
+        sample_count = insight.get("sample_count", 0)
+        
+        # Only apply if we have enough data and reasonable success rate
+        if sample_count < 3:
+            self.logger.debug(f"Insufficient samples ({sample_count}) for memory-guided decision")
+            return None
+        
+        # If success rate is very low, don't recommend retrying
+        if success_rate < 0.1:
+            self.logger.info(
+                f"Historical success rate very low ({success_rate:.1%}), recommending skip"
+            )
+            return {
+                "decision": "skip",
+                "reasoning": (
+                    f"Operational Memory indicates very low success rate ({success_rate:.1%}) "
+                    f"for this scenario based on {sample_count} similar experiences. "
+                    "Recommending skip to avoid wasted effort."
+                ),
+                "recommendations": [
+                    *strategy.get("recommendations", []),
+                    "Consider different attack vector",
+                    "Target may be well-defended against this approach"
+                ],
+                "memory_guided": True,
+                "historical_success_rate": success_rate,
+                "sample_count": sample_count,
+            }
+        
+        # If we have a recommended approach with medium+ confidence
+        recommended_approach = best_approach.get("recommended_approach")
+        if recommended_approach and confidence in ["medium", "high"]:
+            module = recommended_approach.get("module")
+            params = recommended_approach.get("recommended_parameters", {})
+            
+            # Check if module is in available alternatives
+            alternative_modules = context.get("alternative_modules", [])
+            module_available = any(
+                m.get("rx_module_id") == module or m.get("name") == module
+                for m in alternative_modules
+            ) if alternative_modules else True  # Assume available if no list
+            
+            if module_available:
+                avoid_factors = best_approach.get("avoid_factors", [])
+                
+                self.logger.info(
+                    f"Memory-guided decision: Use approach with {success_rate:.1%} success rate"
+                )
+                
+                return {
+                    "decision": "modify_approach",
+                    "reasoning": (
+                        f"Operational Memory recommends this approach based on {sample_count} "
+                        f"similar experiences with {success_rate:.1%} success rate. "
+                        f"Confidence: {confidence}."
+                    ),
+                    "new_module": module,
+                    "modified_parameters": {
+                        **params,
+                        "avoid_patterns": avoid_factors,
+                    },
+                    "recommendations": [
+                        f"Approach selected based on {sample_count} historical experiences",
+                        f"Avoid these patterns: {', '.join(avoid_factors[:3])}" if avoid_factors else "No specific patterns to avoid",
+                        *strategy.get("recommendations", [])[:2],
+                    ],
+                    "memory_guided": True,
+                    "historical_success_rate": success_rate,
+                    "sample_count": sample_count,
+                    "confidence": confidence,
+                }
+        
+        # No actionable insight
+        return None
     
     def _is_high_risk_action(self, task: Dict[str, Any], context: Dict[str, Any]) -> tuple[bool, str, RiskLevel]:
         """
@@ -1311,9 +2020,14 @@ class AnalysisSpecialist(BaseSpecialist):
     
     def get_stats(self) -> Dict[str, Any]:
         """Get analysis statistics."""
+        memory_stats = {}
+        if self._operational_memory:
+            memory_stats = self._operational_memory.get_stats()
+        
         return {
             **self._stats,
-            "analysis_history_size": len(self._analysis_history)
+            "analysis_history_size": len(self._analysis_history),
+            "operational_memory": memory_stats,
         }
     
     def get_recent_analyses(self, limit: int = 10) -> List[Dict[str, Any]]:
