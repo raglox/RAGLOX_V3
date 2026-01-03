@@ -2,6 +2,7 @@
 # RAGLOX v3.0 - Recon Specialist
 # Reconnaissance specialist for network and target discovery
 # With Nuclei Integration and AI-Driven Scanning
+# Enhanced with Intelligence Coordinator and Stealth Management
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -19,6 +20,19 @@ from ..core.blackboard import Blackboard
 from ..core.config import Settings
 from ..core.knowledge import EmbeddedKnowledge, NucleiTemplate
 from ..core.scanners import NucleiScanner, NucleiScanResult
+
+# Hybrid Intelligence Layer imports
+from ..core.intelligence_coordinator import (
+    IntelligenceCoordinator,
+    AttackPath,
+    AttackPathType,
+    StrategicAnalysis,
+)
+from ..core.stealth_profiles import (
+    StealthManager,
+    StealthLevel,
+    DetectionRisk,
+)
 
 if TYPE_CHECKING:
     from ..executors import RXModuleRunner, ExecutorFactory
@@ -64,7 +78,9 @@ class ReconSpecialist(BaseSpecialist):
         worker_id: Optional[str] = None,
         knowledge: Optional[EmbeddedKnowledge] = None,
         runner: Optional['RXModuleRunner'] = None,
-        executor_factory: Optional['ExecutorFactory'] = None
+        executor_factory: Optional['ExecutorFactory'] = None,
+        intelligence_coordinator: Optional[IntelligenceCoordinator] = None,
+        stealth_manager: Optional[StealthManager] = None,
     ):
         super().__init__(
             specialist_type=SpecialistType.RECON,
@@ -84,11 +100,54 @@ class ReconSpecialist(BaseSpecialist):
             TaskType.VULN_SCAN
         }
         
-        # Common ports to scan (MVP - simplified)
-        self._common_ports = [
-            21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 
-            993, 995, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443
-        ]
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Intelligence Coordinator & Stealth Manager
+        # ═══════════════════════════════════════════════════════════
+        self._intelligence_coordinator = intelligence_coordinator or IntelligenceCoordinator(
+            blackboard=blackboard,
+            knowledge_base=knowledge,
+            logger=self.logger
+        )
+        self._stealth_manager = stealth_manager or StealthManager(
+            blackboard=blackboard,
+            default_level=StealthLevel.NORMAL,
+            logger=self.logger
+        )
+        
+        # ═══════════════════════════════════════════════════════════
+        # Dynamic Port Profiles (replaces static _common_ports)
+        # Ports are now prioritized based on strategic value
+        # ═══════════════════════════════════════════════════════════
+        self._port_profiles = {
+            "high_value": {
+                "ports": [88, 389, 636, 3268, 3269, 445, 135],  # Kerberos, LDAP, AD
+                "description": "Domain services - highest strategic value",
+                "priority": 10,
+            },
+            "admin_services": {
+                "ports": [22, 3389, 5985, 5986],  # SSH, RDP, WinRM
+                "description": "Administrative access ports",
+                "priority": 9,
+            },
+            "databases": {
+                "ports": [1433, 1521, 3306, 5432, 27017, 6379],
+                "description": "Database services - data targets",
+                "priority": 8,
+            },
+            "web_services": {
+                "ports": [80, 443, 8080, 8443, 8000, 8888, 9443],
+                "description": "Web services - attack surface",
+                "priority": 7,
+            },
+            "standard_services": {
+                "ports": [21, 23, 25, 53, 110, 143, 993, 995, 139, 111, 5900],
+                "description": "Standard network services",
+                "priority": 5,
+            },
+        }
+        
+        # Flattened common ports list (for backward compatibility)
+        self._common_ports = self._get_prioritized_ports()
         
         # Service detection patterns (simplified for MVP)
         self._service_patterns = {
@@ -153,7 +212,45 @@ class ReconSpecialist(BaseSpecialist):
             5432: ["postgresql", "postgres"],
             6379: ["redis"],
             27017: ["mongodb"],
+            # High-value AD/Domain ports
+            88: ["kerberos", "ad", "domain"],
+            389: ["ldap", "ad", "domain"],
+            636: ["ldaps", "ad", "domain"],
+            3268: ["gc", "globalcatalog", "ad"],
+            3269: ["gcs", "globalcatalog-ssl", "ad"],
         }
+        
+        # Statistics
+        self._stats = {
+            "scans_performed": 0,
+            "targets_discovered": 0,
+            "vulns_found": 0,
+            "intelligence_consultations": 0,
+            "stealth_delays_applied": 0,
+        }
+        
+        self.logger.info("ReconSpecialist initialized with Intelligence Coordinator integration")
+    
+    def _get_prioritized_ports(self) -> List[int]:
+        """
+        Get ports list prioritized by strategic value.
+        High-value ports come first.
+        """
+        ports_with_priority = []
+        for profile_name, profile in self._port_profiles.items():
+            for port in profile["ports"]:
+                ports_with_priority.append((port, profile["priority"]))
+        
+        # Sort by priority (descending) and deduplicate
+        sorted_ports = sorted(ports_with_priority, key=lambda x: x[1], reverse=True)
+        seen = set()
+        unique_ports = []
+        for port, _ in sorted_ports:
+            if port not in seen:
+                seen.add(port)
+                unique_ports.append(port)
+        
+        return unique_ports
     
     @property
     def nuclei_scanner(self) -> NucleiScanner:
@@ -370,6 +467,7 @@ class ReconSpecialist(BaseSpecialist):
         Execute a port scan on a target.
         
         Uses RXModuleRunner for real execution or falls back to simulation.
+        Enhanced with Stealth Management for operation regulation.
         """
         target_id = task.get("target_id")
         if not target_id:
@@ -386,6 +484,28 @@ class ReconSpecialist(BaseSpecialist):
         target_ip = target.get("ip")
         target_os = (target.get("os") or "linux").lower()
         self.logger.info(f"Port scanning target {target_ip}")
+        
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Stealth Regulation
+        # ═══════════════════════════════════════════════════════════
+        can_proceed, delay_ms, block_reason = await self._stealth_manager.regulate_operation(
+            operation_type="port_scan",
+            target_id=target_id,
+            mission_id=self._current_mission_id
+        )
+        
+        if not can_proceed:
+            self.logger.warning(f"Port scan blocked by stealth manager: {block_reason}")
+            return {
+                "error": f"Operation blocked: {block_reason}",
+                "ports_found": 0,
+                "stealth_blocked": True
+            }
+        
+        if delay_ms and delay_ms > 0:
+            self.logger.debug(f"Applying stealth delay: {delay_ms}ms")
+            await self._stealth_manager.apply_delay(delay_ms, "port_scan")
+            self._stats["stealth_delays_applied"] += 1
         
         execution_mode = "real" if self.is_real_execution_mode else "simulated"
         
@@ -415,12 +535,87 @@ class ReconSpecialist(BaseSpecialist):
                 target_id=target_id
             )
         
-        return {
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Process recon results through coordinator
+        # ═══════════════════════════════════════════════════════════
+        strategic_analysis = None
+        if open_ports:
+            # Identify high-value ports discovered
+            high_value_ports = self._identify_high_value_ports(open_ports)
+            if high_value_ports:
+                self.logger.info(
+                    f"[INTELLIGENCE] High-value ports discovered on {target_ip}: {high_value_ports}"
+                )
+                
+                # Process through Intelligence Coordinator
+                services = [
+                    {"name": self._service_patterns.get(p, ("unknown", "Unknown"))[0], "port": p}
+                    for p in open_ports
+                ]
+                
+                try:
+                    strategic_analysis = await self._intelligence_coordinator.process_recon_results(
+                        mission_id=self._current_mission_id,
+                        target_id=target_id,
+                        services=services,
+                        vulnerabilities=[]
+                    )
+                    self._stats["intelligence_consultations"] += 1
+                    
+                    # Log strategic insights
+                    if strategic_analysis:
+                        self.logger.info(
+                            f"[INTELLIGENCE] Strategic value: {strategic_analysis.strategic_value}, "
+                            f"Recommended paths: {len(strategic_analysis.recommended_paths)}"
+                        )
+                except Exception as e:
+                    self.logger.warning(f"Intelligence processing failed: {e}")
+        
+        self._stats["scans_performed"] += 1
+        
+        result = {
             "target_ip": target_ip,
             "ports_found": len(open_ports),
             "open_ports": open_ports,
-            "execution_mode": execution_mode
+            "execution_mode": execution_mode,
         }
+        
+        if strategic_analysis:
+            result["strategic_analysis"] = {
+                "value": strategic_analysis.strategic_value,
+                "attack_surface": len(strategic_analysis.attack_surface),
+                "recommended_paths": len(strategic_analysis.recommended_paths),
+            }
+        
+        return result
+    
+    def _identify_high_value_ports(self, ports: List[int]) -> List[int]:
+        """
+        Identify high-value ports from a list of open ports.
+        
+        These are ports that indicate high-value services like:
+        - Domain Controllers (88, 389, 636, etc.)
+        - Administrative access (22, 3389, 5985)
+        - Databases (1433, 3306, etc.)
+        """
+        high_value = []
+        
+        # Domain/AD ports
+        domain_ports = {88, 389, 636, 3268, 3269, 445, 135}
+        
+        # Admin ports
+        admin_ports = {22, 3389, 5985, 5986}
+        
+        # Database ports
+        db_ports = {1433, 1521, 3306, 5432, 27017, 6379}
+        
+        all_high_value = domain_ports | admin_ports | db_ports
+        
+        for port in ports:
+            if port in all_high_value:
+                high_value.append(port)
+        
+        return high_value
     
     async def _real_port_scan(
         self, 

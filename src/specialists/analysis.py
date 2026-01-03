@@ -2,6 +2,7 @@
 # RAGLOX v3.0 - Analysis Specialist
 # Reflexion Logic specialist for failure analysis and adaptive learning
 # With LLM Integration for intelligent decision making
+# Enhanced with Operational Memory for adaptive learning
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -23,6 +24,14 @@ from ..core.models import (
 from ..core.blackboard import Blackboard
 from ..core.config import Settings, get_settings
 from ..core.knowledge import EmbeddedKnowledge, NucleiTemplate
+
+# Hybrid Intelligence Layer imports
+from ..core.operational_memory import (
+    OperationalMemory,
+    DecisionRecord,
+    DecisionOutcome,
+    OperationalContext,
+)
 
 # LLM imports
 if TYPE_CHECKING:
@@ -162,6 +171,7 @@ class AnalysisSpecialist(BaseSpecialist):
         knowledge: Optional[EmbeddedKnowledge] = None,
         llm_enabled: Optional[bool] = None,
         llm_service: Optional["LLMService"] = None,
+        operational_memory: Optional[OperationalMemory] = None,
     ):
         super().__init__(
             specialist_type=SpecialistType.ANALYSIS,
@@ -179,7 +189,15 @@ class AnalysisSpecialist(BaseSpecialist):
         self._llm_service = llm_service
         self._llm_initialized = False
         
-        # Analysis history for learning
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Operational Memory Integration
+        # ═══════════════════════════════════════════════════════════
+        self._operational_memory = operational_memory or OperationalMemory(
+            blackboard=blackboard,
+            logger=self.logger
+        )
+        
+        # Analysis history for learning (local cache, syncs with OperationalMemory)
         self._analysis_history: List[Dict[str, Any]] = []
         
         # Currently no specific task types - analysis works on events
@@ -196,6 +214,10 @@ class AnalysisSpecialist(BaseSpecialist):
             "llm_failures": 0,
             "rule_based_fallbacks": 0,
             "safety_limit_breaches": 0,
+            # New: Memory-assisted stats
+            "memory_consultations": 0,
+            "memory_guided_decisions": 0,
+            "historical_insights_applied": 0,
         }
         
         # Safety limits tracking (per mission)
@@ -204,6 +226,8 @@ class AnalysisSpecialist(BaseSpecialist):
         self._mission_estimated_cost = 0.0
         self._daily_llm_requests = 0
         self._daily_reset_date = datetime.utcnow().date()
+        
+        self.logger.info("AnalysisSpecialist initialized with Operational Memory integration")
     
     def _check_safety_limits(self) -> tuple[bool, str]:
         """
@@ -420,6 +444,7 @@ class AnalysisSpecialist(BaseSpecialist):
         Analyze a failed task and determine next steps.
         
         This is the core Reflexion Logic implementation.
+        Enhanced with Operational Memory for adaptive learning.
         
         Args:
             task_id: ID of the failed task
@@ -455,6 +480,19 @@ class AnalysisSpecialist(BaseSpecialist):
         # Gather context for decision
         context = await self._gather_analysis_context(original_task, error_context)
         
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Consult Operational Memory
+        # ═══════════════════════════════════════════════════════════
+        historical_insight = await self._get_historical_insight(
+            original_task, error_context, context
+        )
+        if historical_insight:
+            context["historical_insight"] = historical_insight
+            self._stats["memory_consultations"] += 1
+        
+        # Record decision start time for tracking
+        decision_start_time = datetime.utcnow()
+        
         # Make decision
         decision = await self._make_decision(
             original_task=original_task,
@@ -467,20 +505,266 @@ class AnalysisSpecialist(BaseSpecialist):
             max_retries=max_retries
         )
         
-        # Record analysis
+        # Calculate decision duration
+        decision_duration_ms = int((datetime.utcnow() - decision_start_time).total_seconds() * 1000)
+        
+        # Record analysis in local history
         analysis_record = {
             "task_id": task_id,
             "error_type": error_type,
             "category": category,
             "decision": decision["decision"],
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "used_historical_insight": historical_insight is not None,
+            "duration_ms": decision_duration_ms,
         }
         self._analysis_history.append(analysis_record)
+        
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Record Decision in Operational Memory
+        # ═══════════════════════════════════════════════════════════
+        await self._record_decision_to_memory(
+            original_task, error_context, context, decision, decision_duration_ms
+        )
         
         # Publish analysis result event
         await self._publish_analysis_result(task_id, original_task, decision)
         
         return decision
+    
+    # ═══════════════════════════════════════════════════════════
+    # Hybrid Intelligence: Operational Memory Integration Methods
+    # ═══════════════════════════════════════════════════════════
+    
+    async def _get_historical_insight(
+        self,
+        task: Dict[str, Any],
+        error_context: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Query Operational Memory for historical insights.
+        
+        This is the key to adaptive learning - we learn from past failures!
+        
+        Args:
+            task: The original failed task
+            error_context: Error context from the failure
+            context: Gathered analysis context
+            
+        Returns:
+            Historical insight dict or None if no relevant data
+        """
+        if not self._operational_memory:
+            return None
+        
+        try:
+            # Determine context type
+            task_type = task.get("type", "").lower()
+            if "exploit" in task_type:
+                op_context = OperationalContext.EXPLOIT
+            elif "privesc" in task_type:
+                op_context = OperationalContext.PRIVESC
+            elif "lateral" in task_type:
+                op_context = OperationalContext.LATERAL
+            elif "cred" in task_type:
+                op_context = OperationalContext.CRED_HARVEST
+            else:
+                op_context = OperationalContext.ANALYSIS
+            
+            # Get target OS from context
+            target_info = context.get("target_info") or {}
+            target_os = target_info.get("os")
+            
+            # Get vulnerability type from context
+            vuln_info = context.get("vuln_info") or {}
+            vuln_type = vuln_info.get("type") or error_context.get("technique_id")
+            
+            # Search for similar experiences
+            experiences = await self._operational_memory.get_similar_experiences(
+                context=op_context,
+                target_os=target_os,
+                vuln_type=vuln_type,
+                limit=10
+            )
+            
+            if not experiences:
+                self.logger.debug("No historical experiences found for this context")
+                return None
+            
+            # Get best approach recommendation
+            best_approach = await self._operational_memory.get_best_approach_for_context(
+                context=op_context,
+                target_os=target_os,
+                vuln_type=vuln_type,
+                available_modules=[m.get("rx_module_id") for m in context.get("alternative_modules", [])]
+            )
+            
+            # Get success rate
+            success_rate, sample_count = await self._operational_memory.get_success_rate_for_context(
+                context=op_context,
+                target_os=target_os,
+                vuln_type=vuln_type
+            )
+            
+            insight = {
+                "experiences_found": len(experiences),
+                "success_rate": success_rate,
+                "sample_count": sample_count,
+                "best_approach": best_approach,
+                "common_failure_factors": self._extract_common_failures(experiences),
+                "recommended_modifications": self._extract_successful_modifications(experiences),
+            }
+            
+            self.logger.info(
+                f"Historical insight found: {len(experiences)} experiences, "
+                f"success rate: {success_rate:.1%} (n={sample_count})"
+            )
+            
+            return insight
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to get historical insight: {e}")
+            return None
+    
+    def _extract_common_failures(self, experiences: List[DecisionRecord]) -> List[str]:
+        """Extract common failure factors from experiences."""
+        from collections import Counter
+        
+        all_factors = []
+        for exp in experiences:
+            if exp.outcome == DecisionOutcome.FAILURE:
+                all_factors.extend(exp.failure_factors)
+        
+        if not all_factors:
+            return []
+        
+        # Return top 5 most common
+        counter = Counter(all_factors)
+        return [factor for factor, _ in counter.most_common(5)]
+    
+    def _extract_successful_modifications(
+        self,
+        experiences: List[DecisionRecord]
+    ) -> List[Dict[str, Any]]:
+        """Extract successful modifications from past experiences."""
+        modifications = []
+        
+        for exp in experiences:
+            if exp.outcome == DecisionOutcome.SUCCESS and exp.decision_type == "modify_approach":
+                modifications.append({
+                    "parameters": exp.parameters_used,
+                    "success_factors": exp.success_factors,
+                    "module": exp.parameters_used.get("module"),
+                })
+        
+        return modifications[:5]  # Top 5
+    
+    async def _record_decision_to_memory(
+        self,
+        original_task: Dict[str, Any],
+        error_context: Dict[str, Any],
+        context: Dict[str, Any],
+        decision: Dict[str, Any],
+        duration_ms: int
+    ) -> None:
+        """
+        Record the analysis decision in Operational Memory.
+        
+        This enables future learning from this decision!
+        """
+        if not self._operational_memory:
+            return
+        
+        try:
+            # Determine context type
+            task_type = original_task.get("type", "").lower()
+            if "exploit" in task_type:
+                op_context = OperationalContext.EXPLOIT
+            elif "privesc" in task_type:
+                op_context = OperationalContext.PRIVESC
+            elif "lateral" in task_type:
+                op_context = OperationalContext.LATERAL
+            elif "cred" in task_type:
+                op_context = OperationalContext.CRED_HARVEST
+            else:
+                op_context = OperationalContext.ANALYSIS
+            
+            # Get mission ID
+            mission_id = None
+            if self._current_mission_id:
+                try:
+                    mission_id = UUID(self._current_mission_id)
+                except (ValueError, TypeError):
+                    pass
+            
+            # Prepare target and vuln info
+            target_info = context.get("target_info")
+            vuln_info = context.get("vuln_info")
+            
+            # Build parameters
+            parameters = {
+                "decision": decision.get("decision"),
+                "error_category": self._categorize_error(error_context.get("error_type", "unknown")),
+                "module": decision.get("new_module") or original_task.get("rx_module"),
+                **decision.get("modified_parameters", {})
+            }
+            
+            # Record the decision
+            decision_id = await self._operational_memory.record_decision(
+                mission_id=mission_id,
+                context=op_context,
+                decision_type=decision.get("decision", "unknown"),
+                decision_source="llm" if decision.get("llm_analysis") else "rules",
+                parameters=parameters,
+                target_info=target_info,
+                vuln_info=vuln_info
+            )
+            
+            # Note: The outcome will be updated when we get feedback
+            # For now, we mark it as pending (default is FAILURE, will be updated)
+            
+            self.logger.debug(f"Recorded decision {decision_id} to Operational Memory")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to record decision to memory: {e}")
+    
+    async def update_decision_outcome(
+        self,
+        decision_id: UUID,
+        success: bool,
+        details: Dict[str, Any],
+        lessons: Optional[List[str]] = None
+    ) -> None:
+        """
+        Update the outcome of a previously recorded decision.
+        
+        Call this when we know if the decision led to success or failure.
+        This completes the learning loop!
+        
+        Args:
+            decision_id: ID of the decision to update
+            success: Whether the decision led to success
+            details: Additional details about the outcome
+            lessons: Lessons learned from this experience
+        """
+        if not self._operational_memory:
+            return
+        
+        try:
+            outcome = DecisionOutcome.SUCCESS if success else DecisionOutcome.FAILURE
+            
+            await self._operational_memory.update_outcome(
+                decision_id=decision_id,
+                outcome=outcome,
+                details=details,
+                lessons=lessons
+            )
+            
+            self.logger.info(f"Updated decision {decision_id} outcome: {outcome.value}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to update decision outcome: {e}")
     
     def _categorize_error(self, error_type: str) -> str:
         """Categorize an error type into a broader category."""
@@ -825,6 +1109,19 @@ class AnalysisSpecialist(BaseSpecialist):
                 original_task, context, risk_reason, risk_level
             )
         
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Apply Historical Insight First
+        # ═══════════════════════════════════════════════════════════
+        historical_insight = context.get("historical_insight")
+        if historical_insight:
+            memory_decision = self._apply_historical_insight(
+                historical_insight, category, strategy, context
+            )
+            if memory_decision:
+                self._stats["memory_guided_decisions"] += 1
+                self._stats["historical_insights_applied"] += 1
+                return memory_decision
+        
         # Check if LLM analysis is available and needed
         if self.llm_enabled and self._needs_llm_analysis(category, context):
             return await self._llm_decision(
@@ -997,6 +1294,14 @@ class AnalysisSpecialist(BaseSpecialist):
     
     def _needs_llm_analysis(self, category: str, context: Dict[str, Any]) -> bool:
         """Determine if this failure needs LLM analysis."""
+        # If we have good historical insight with high confidence, skip LLM
+        historical_insight = context.get("historical_insight")
+        if historical_insight:
+            best_approach = historical_insight.get("best_approach", {})
+            if best_approach.get("confidence") == "high":
+                self.logger.debug("High-confidence historical insight available, skipping LLM")
+                return False
+        
         # Complex defense scenarios benefit from LLM reasoning
         if category == "defense" and len(context.get("detected_defenses", [])) > 1:
             return True
@@ -1006,6 +1311,108 @@ class AnalysisSpecialist(BaseSpecialist):
             return True
         
         return False
+    
+    def _apply_historical_insight(
+        self,
+        insight: Dict[str, Any],
+        category: str,
+        strategy: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Apply historical insight to make a decision.
+        
+        This is where we actually USE the memory to guide decisions!
+        
+        Args:
+            insight: Historical insight from Operational Memory
+            category: Error category
+            strategy: Retry strategy for this category
+            context: Full analysis context
+            
+        Returns:
+            Decision dict if insight is actionable, None otherwise
+        """
+        best_approach = insight.get("best_approach")
+        if not best_approach:
+            return None
+        
+        confidence = best_approach.get("confidence", "low")
+        success_rate = insight.get("success_rate", 0.5)
+        sample_count = insight.get("sample_count", 0)
+        
+        # Only apply if we have enough data and reasonable success rate
+        if sample_count < 3:
+            self.logger.debug(f"Insufficient samples ({sample_count}) for memory-guided decision")
+            return None
+        
+        # If success rate is very low, don't recommend retrying
+        if success_rate < 0.1:
+            self.logger.info(
+                f"Historical success rate very low ({success_rate:.1%}), recommending skip"
+            )
+            return {
+                "decision": "skip",
+                "reasoning": (
+                    f"Operational Memory indicates very low success rate ({success_rate:.1%}) "
+                    f"for this scenario based on {sample_count} similar experiences. "
+                    "Recommending skip to avoid wasted effort."
+                ),
+                "recommendations": [
+                    *strategy.get("recommendations", []),
+                    "Consider different attack vector",
+                    "Target may be well-defended against this approach"
+                ],
+                "memory_guided": True,
+                "historical_success_rate": success_rate,
+                "sample_count": sample_count,
+            }
+        
+        # If we have a recommended approach with medium+ confidence
+        recommended_approach = best_approach.get("recommended_approach")
+        if recommended_approach and confidence in ["medium", "high"]:
+            module = recommended_approach.get("module")
+            params = recommended_approach.get("recommended_parameters", {})
+            
+            # Check if module is in available alternatives
+            alternative_modules = context.get("alternative_modules", [])
+            module_available = any(
+                m.get("rx_module_id") == module or m.get("name") == module
+                for m in alternative_modules
+            ) if alternative_modules else True  # Assume available if no list
+            
+            if module_available:
+                avoid_factors = best_approach.get("avoid_factors", [])
+                
+                self.logger.info(
+                    f"Memory-guided decision: Use approach with {success_rate:.1%} success rate"
+                )
+                
+                return {
+                    "decision": "modify_approach",
+                    "reasoning": (
+                        f"Operational Memory recommends this approach based on {sample_count} "
+                        f"similar experiences with {success_rate:.1%} success rate. "
+                        f"Confidence: {confidence}."
+                    ),
+                    "new_module": module,
+                    "modified_parameters": {
+                        **params,
+                        "avoid_patterns": avoid_factors,
+                    },
+                    "recommendations": [
+                        f"Approach selected based on {sample_count} historical experiences",
+                        f"Avoid these patterns: {', '.join(avoid_factors[:3])}" if avoid_factors else "No specific patterns to avoid",
+                        *strategy.get("recommendations", [])[:2],
+                    ],
+                    "memory_guided": True,
+                    "historical_success_rate": success_rate,
+                    "sample_count": sample_count,
+                    "confidence": confidence,
+                }
+        
+        # No actionable insight
+        return None
     
     def _is_high_risk_action(self, task: Dict[str, Any], context: Dict[str, Any]) -> tuple[bool, str, RiskLevel]:
         """
@@ -1613,9 +2020,14 @@ class AnalysisSpecialist(BaseSpecialist):
     
     def get_stats(self) -> Dict[str, Any]:
         """Get analysis statistics."""
+        memory_stats = {}
+        if self._operational_memory:
+            memory_stats = self._operational_memory.get_stats()
+        
         return {
             **self._stats,
-            "analysis_history_size": len(self._analysis_history)
+            "analysis_history_size": len(self._analysis_history),
+            "operational_memory": memory_stats,
         }
     
     def get_recent_analyses(self, limit: int = 10) -> List[Dict[str, Any]]:

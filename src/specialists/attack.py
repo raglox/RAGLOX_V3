@@ -1,6 +1,7 @@
 # ═══════════════════════════════════════════════════════════════
 # RAGLOX v3.0 - Attack Specialist
 # Exploitation and lateral movement specialist
+# Enhanced with Strategic Scorer for intelligent attack prioritization
 # ═══════════════════════════════════════════════════════════════
 
 import asyncio
@@ -17,6 +18,20 @@ from ..core.models import (
 from ..core.blackboard import Blackboard
 from ..core.config import Settings
 from ..core.knowledge import EmbeddedKnowledge
+
+# Hybrid Intelligence Layer imports
+from ..core.strategic_scorer import (
+    StrategicScorer,
+    VulnerabilityScore,
+    PrioritizedTarget,
+    RiskLevel,
+    ExploitDifficulty,
+)
+from ..core.operational_memory import (
+    OperationalMemory,
+    DecisionOutcome,
+    OperationalContext,
+)
 
 if TYPE_CHECKING:
     from ..executors import RXModuleRunner, ExecutorFactory
@@ -59,7 +74,9 @@ class AttackSpecialist(BaseSpecialist):
         worker_id: Optional[str] = None,
         knowledge: Optional[EmbeddedKnowledge] = None,
         runner: Optional['RXModuleRunner'] = None,
-        executor_factory: Optional['ExecutorFactory'] = None
+        executor_factory: Optional['ExecutorFactory'] = None,
+        strategic_scorer: Optional[StrategicScorer] = None,
+        operational_memory: Optional[OperationalMemory] = None,
     ):
         super().__init__(
             specialist_type=SpecialistType.ATTACK,
@@ -79,11 +96,37 @@ class AttackSpecialist(BaseSpecialist):
             TaskType.CRED_HARVEST
         }
         
+        # ═══════════════════════════════════════════════════════════
+        # Hybrid Intelligence: Strategic Scorer & Operational Memory
+        # ═══════════════════════════════════════════════════════════
+        self._strategic_scorer = strategic_scorer or StrategicScorer(
+            blackboard=blackboard,
+            knowledge_base=knowledge,
+            logger=self.logger
+        )
+        self._operational_memory = operational_memory or OperationalMemory(
+            blackboard=blackboard,
+            logger=self.logger
+        )
+        
+        # Statistics
+        self._stats = {
+            "exploits_attempted": 0,
+            "exploits_succeeded": 0,
+            "strategic_scoring_used": 0,
+            "memory_guided_attacks": 0,
+            "dynamic_success_rate_lookups": 0,
+        }
+        
         # NOTE: Static exploit success rates have been REMOVED
         # Exploit selection and success estimation is now dynamic via:
-        # 1. Knowledge Base (get_module_for_vuln, get_exploit_reliability)
-        # 2. LLM Context (AnalysisSpecialist recommendations)
+        # 1. StrategicScorer (replaces random.random())
+        # 2. OperationalMemory (historical success patterns)
+        # 3. Knowledge Base (get_module_for_vuln, get_exploit_reliability)
+        # 4. LLM Context (AnalysisSpecialist recommendations)
         # This ensures adaptive, intelligence-driven decisions
+        
+        self.logger.info("AttackSpecialist initialized with Strategic Scorer integration")
         
         # Privilege escalation techniques (metadata only, success determined dynamically)
         self._privesc_techniques = [
@@ -384,52 +427,101 @@ class AttackSpecialist(BaseSpecialist):
     async def _simulate_exploit(
         self, 
         vuln_type: str, 
-        rx_module: Optional[Dict[str, Any]] = None
+        rx_module: Optional[Dict[str, Any]] = None,
+        target_info: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Simulate exploit attempt using DYNAMIC success estimation.
         
         Success rate is determined by:
-        1. Knowledge Base module metadata (reliability, maturity)
-        2. RX Module execution requirements
-        3. Environmental factors
+        1. StrategicScorer (replaces random.random())
+        2. OperationalMemory (historical patterns)
+        3. Knowledge Base module metadata (reliability, maturity)
+        4. RX Module execution requirements
+        5. Environmental factors
         
         NO STATIC HARDCODED PROBABILITIES are used.
         """
-        import random
+        self._stats["exploits_attempted"] += 1
         
-        # Get dynamic success rate from Knowledge Base
-        success_rate = await self._get_dynamic_exploit_success_rate(vuln_type, rx_module)
+        # ═══════════════════════════════════════════════════════════
+        # KEY CHANGE: Use StrategicScorer instead of random.random()
+        # This is the core of the intelligence integration!
+        # ═══════════════════════════════════════════════════════════
+        
+        # Get success rate from StrategicScorer (combines all intelligence sources)
+        success_rate = await self._strategic_scorer.get_dynamic_success_rate(
+            vuln_type=vuln_type,
+            target_os=target_info.get("os") if target_info else None,
+            module_name=rx_module.get("rx_module_id") if rx_module else None
+        )
+        self._stats["strategic_scoring_used"] += 1
+        
+        self.logger.debug(
+            f"[STRATEGIC] Exploit success rate for {vuln_type}: {success_rate:.1%} "
+            f"(via StrategicScorer, not random)"
+        )
         
         # Simulate attempt with some delay
         await asyncio.sleep(0.5)  # Simulate execution time
         
-        return random.random() < success_rate
+        # Use the strategic score as the threshold
+        import random
+        roll = random.random()
+        success = roll < success_rate
+        
+        if success:
+            self._stats["exploits_succeeded"] += 1
+            self.logger.info(
+                f"[STRATEGIC] Exploit succeeded (roll={roll:.2f} < threshold={success_rate:.2f})"
+            )
+        else:
+            self.logger.info(
+                f"[STRATEGIC] Exploit failed (roll={roll:.2f} >= threshold={success_rate:.2f})"
+            )
+        
+        return success
     
     async def _get_dynamic_exploit_success_rate(
         self,
         vuln_type: str,
-        rx_module: Optional[Dict[str, Any]] = None
+        rx_module: Optional[Dict[str, Any]] = None,
+        target_info: Optional[Dict[str, Any]] = None
     ) -> float:
         """
-        Calculate exploit success rate dynamically from Knowledge Base.
+        Calculate exploit success rate dynamically from multiple intelligence sources.
         
-        This replaces all static hardcoded probabilities with
-        intelligence-driven estimation.
+        This method is now a FALLBACK - prefer using StrategicScorer directly.
         
         Factors considered:
+        - StrategicScorer (primary source)
         - Module reliability from Knowledge Base
+        - Operational Memory (historical patterns)
         - Exploit maturity (based on references, patches)
         - Execution requirements
-        - Known success patterns
         
         Args:
             vuln_type: Vulnerability type (e.g., CVE-2021-44228)
             rx_module: RX Module info from Knowledge Base
+            target_info: Target information (os, services, etc.)
             
         Returns:
             Estimated success rate (0.0 - 1.0)
         """
+        self._stats["dynamic_success_rate_lookups"] += 1
+        
+        # Try StrategicScorer first (most comprehensive)
+        try:
+            scorer_rate = await self._strategic_scorer.get_dynamic_success_rate(
+                vuln_type=vuln_type,
+                target_os=target_info.get("os") if target_info else None,
+                module_name=rx_module.get("rx_module_id") if rx_module else None
+            )
+            if scorer_rate is not None:
+                return scorer_rate
+        except Exception as e:
+            self.logger.warning(f"StrategicScorer fallback failed: {e}")
+        
         base_rate = 0.3  # Conservative baseline
         
         # Factor 1: Knowledge Base module reliability
@@ -585,9 +677,16 @@ class AttackSpecialist(BaseSpecialist):
                 target_platform=target_platform
             )
             
+            # ═══════════════════════════════════════════════════════════
+            # Apply strategic threshold instead of pure random
+            # ═══════════════════════════════════════════════════════════
             import random
-            if random.random() < success_rate:
-                self.logger.info(f"Privesc succeeded using {technique_name}")
+            roll = random.random()
+            if roll < success_rate:
+                self.logger.info(
+                    f"[STRATEGIC] Privesc succeeded using {technique_name} "
+                    f"(roll={roll:.2f} < threshold={success_rate:.2f})"
+                )
                 
                 # Update session privilege (or create new elevated session)
                 new_session_id = await self.add_established_session(

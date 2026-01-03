@@ -86,12 +86,17 @@ def create_app() -> FastAPI:
     # If wildcard, credentials must be False (per CORS spec)
     allow_creds = False if "*" in cors_origins else True
     
+    # Debug: Print CORS configuration
+    print(f"🔧 CORS Configuration: origins={cors_origins}, credentials={allow_creds}")
+    
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_credentials=allow_creds,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=3600,  # Cache preflight response for 1 hour
     )
     
     # Include routers
